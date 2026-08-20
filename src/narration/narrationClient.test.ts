@@ -17,10 +17,19 @@ describe("NarrationClient", () => {
     const result = await client.generate("hello world");
 
     expect(result.audioPath).toBe("/tmp/beat_01.wav");
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "http://127.0.0.1:17493/generate",
-      expect.objectContaining({ method: "POST" })
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(url).toBe("http://127.0.0.1:17493/generate");
+    expect(options).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      })
     );
+    expect(JSON.parse(options.body as string)).toEqual({
+      text: "hello world",
+      profile_id: "test-profile",
+    });
   });
 
   it("posts an audio path to /transcribe and returns segments", async () => {
@@ -42,6 +51,18 @@ describe("NarrationClient", () => {
     expect(result.segments).toEqual([
       { text: "hello world", startSeconds: 0.0, endSeconds: 1.2, words: undefined },
     ]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(url).toBe("http://127.0.0.1:17493/transcribe");
+    expect(options).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      })
+    );
+    expect(JSON.parse(options.body as string)).toEqual({
+      audio_path: "/tmp/beat_01.wav",
+    });
   });
 
   it("throws when the service responds with a non-ok status", async () => {

@@ -6,6 +6,7 @@ import { NarrationClient, type TranscribeResult } from "../src/narration/narrati
 import { buildTimingTrack } from "../src/timing/timingExtractor.js";
 import { applyLexicon, mergeLexicons } from "../src/pronunciation/lexicon.js";
 import { parseVideoScript, type VideoScript } from "../src/schema/videoScript.js";
+import { cuecastWebpackOverride } from "../src/remotion/webpackOverride.js";
 import baseLexicon from "../lexicon/base.json" with { type: "json" };
 
 export async function renderVideo(
@@ -60,46 +61,7 @@ export async function renderVideo(
 
   const bundleLocation = await bundle({
     entryPoint: "src/remotion/Root.tsx",
-    // Same fix Task 8 needed (see test/render/composition.render.test.ts):
-    // Remotion's default webpack config only probes .ts/.tsx for
-    // extensionless imports, so it can't resolve Root.tsx's explicit
-    // ".js"-suffixed imports that actually point at ".tsx" source.
-    // `extensionAlias` makes ".js" fall back to .ts/.tsx.
-    //
-    // Root.tsx also needs a checked-in fixture SVG's raw text (embedded in
-    // its `defaultProps` for the "Cuecast" composition's default), but
-    // Root.tsx is bundled for and executed inside the headless browser
-    // Remotion renders with, where `node:fs` isn't available. The `?raw`
-    // import convention resolves to the file's raw text via `asset/source`
-    // instead of Remotion's default `asset/resource` (a URL string), and is
-    // excluded from the default asset/resource rule so the two module rules
-    // don't both claim the same import.
-    webpackOverride: (config) => {
-      const rules = (config.module?.rules ?? []).map((rule) => {
-        if (
-          rule &&
-          typeof rule === "object" &&
-          rule.type === "asset/resource"
-        ) {
-          return { ...rule, resourceQuery: { not: [/raw/] } };
-        }
-        return rule;
-      });
-
-      return {
-        ...config,
-        resolve: {
-          ...config.resolve,
-          extensionAlias: {
-            ".js": [".js", ".ts", ".tsx"],
-          },
-        },
-        module: {
-          ...config.module,
-          rules: [{ resourceQuery: /raw/, type: "asset/source" }, ...rules],
-        },
-      };
-    },
+    webpackOverride: cuecastWebpackOverride,
   });
   const composition = await selectComposition({
     serveUrl: bundleLocation,
