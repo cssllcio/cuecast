@@ -1,0 +1,11 @@
+C4Container
+title Example System Container Diagram
+
+Person(user, "User")
+System_Boundary(sys, "Example System") {
+  Container(api, "API", "Node.js", "Handles requests")
+  ContainerDb(db, "Database", "Postgres", "Stores data")
+}
+
+Rel(user, api, "Uses", "HTTPS")
+Rel(api, db, "Reads/writes", "SQL")
