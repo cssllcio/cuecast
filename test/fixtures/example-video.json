@@ -1,0 +1,26 @@
+{
+  "id": "example_video",
+  "diagram": {
+    "source": "test/fixtures/generic-container.mmd",
+    "revealGroups": { "group_api": ["api"], "group_db": ["db"] }
+  },
+  "script": [
+    {
+      "id": "beat_01",
+      "type": "narration",
+      "text": "The API talks to the database.",
+      "spoken": "The A P I talks to the database.",
+      "reveal": ["group_api"]
+    },
+    { "id": "beat_02", "type": "silence", "duration": 1.0 },
+    {
+      "id": "beat_03",
+      "type": "narration",
+      "text": "It reads and writes through SQL.",
+      "spoken": "It reads and writes through S Q L.",
+      "reveal": ["group_db"]
+    }
+  ],
+  "pronunciations": { "sql": "S Q L", "api": "A P I" },
+  "timing": []
+}
