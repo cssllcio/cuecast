@@ -33,6 +33,12 @@ export async function renderVideo(
   // already resolves this same constraint) before bundle() runs, below.
   mkdirSync("public/audio", { recursive: true });
 
+  function copyBeatAudioToPublic(beatId: string, sourcePath: string): string {
+    const publicPath = publicAudioPath(beatId, sourcePath);
+    copyFileSync(sourcePath, `public/${publicPath}`);
+    return publicPath;
+  }
+
   const client = new NarrationClient({ baseUrl, profileId });
   const transcriptions = new Map<string, TranscribeResult>();
   const bedDurations = new Map<string, number>();
@@ -44,17 +50,10 @@ export async function renderVideo(
       const generated = await client.generate(spoken);
       const transcribed = await client.transcribe(generated.audioPath);
       transcriptions.set(beat.id, transcribed);
-
-      const publicPath = publicAudioPath(beat.id, generated.audioPath);
-      copyFileSync(generated.audioPath, `public/${publicPath}`);
-      audioPaths.set(beat.id, publicPath);
+      audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, generated.audioPath));
     } else if (beat.type === "bed") {
-      const duration = await probeAudioDurationSeconds(beat.audio);
-      bedDurations.set(beat.id, duration);
-
-      const publicPath = publicAudioPath(beat.id, beat.audio);
-      copyFileSync(beat.audio, `public/${publicPath}`);
-      audioPaths.set(beat.id, publicPath);
+      bedDurations.set(beat.id, await probeAudioDurationSeconds(beat.audio));
+      audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, beat.audio));
     }
   }
 
@@ -90,9 +89,22 @@ export async function renderVideo(
     entryPoint: "src/remotion/Root.tsx",
     webpackOverride: cuecastWebpackOverride,
   });
+  const inputProps = { videoScript: finalVideoScript, svgContent };
+
+  // inputProps MUST be passed to selectComposition, not only renderMedia.
+  // selectComposition resolves the composition's metadata (including its
+  // props) once and freezes it; renderMedia's own `composition` argument
+  // (built from that frozen metadata below) short-circuits the in-browser
+  // prop-resolution path renderMedia would otherwise use to merge inputProps
+  // in. Passing inputProps only to renderMedia compiles and renders — using
+  // Root.tsx's hardcoded default props instead, silently — which is exactly
+  // how this went unnoticed: confirmed by a debug probe showing the
+  // component receiving Root.tsx's fixture videoScript.id regardless of
+  // what was passed to renderMedia alone.
   const composition = await selectComposition({
     serveUrl: bundleLocation,
     id: "Cuecast",
+    inputProps,
   });
 
   await renderMedia({
@@ -105,6 +117,6 @@ export async function renderVideo(
     serveUrl: bundleLocation,
     codec: "h264",
     outputLocation: outputPath,
-    inputProps: { videoScript: finalVideoScript, svgContent },
+    inputProps,
   });
 }

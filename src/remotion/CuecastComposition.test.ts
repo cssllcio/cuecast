@@ -19,8 +19,8 @@ describe("buildAudioSequences", () => {
     const sequences = buildAudioSequences(videoScript, 30);
 
     expect(sequences).toEqual([
-      { audioPath: "audio/beat_01.wav", fromFrame: 0 },
-      { audioPath: "audio/beat_03.wav", fromFrame: 117 },
+      { audioPath: "audio/beat_01.wav", fromFrame: 0, durationInFrames: 72 },
+      { audioPath: "audio/beat_03.wav", fromFrame: 117, durationInFrames: 186 },
     ]);
   });
 
