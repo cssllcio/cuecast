@@ -1,64 +1,57 @@
 import type { NarrationBeat, ScriptBeat, TimingEntry } from "../schema/videoScript.js";
-import type { TranscribeResult } from "../narration/narrationClient.js";
 
 export function extractBeatTiming(
   beat: NarrationBeat,
-  transcribeResult: TranscribeResult,
+  durationSeconds: number,
   offsetSeconds: number
 ): TimingEntry {
-  const first = transcribeResult.segments.at(0);
-  const last = transcribeResult.segments.at(-1);
-
-  if (!first || !last) {
-    throw new Error(`no transcription segments for beat ${beat.id}`);
-  }
-
   return {
     beatId: beat.id,
-    startSeconds: offsetSeconds + first.startSeconds,
-    endSeconds: offsetSeconds + last.endSeconds,
+    startSeconds: offsetSeconds,
+    endSeconds: offsetSeconds + durationSeconds,
   };
 }
 
+// Lays beats out back-to-back on one timeline. `durations` holds the real
+// audio length, in seconds, for every beat that has audio: narration beats
+// (from the completed /generate response) and bed beats (probed from the
+// supplied file). Silence beats carry their own authored duration.
+//
+// A narration beat with no duration is an error — its audio was never
+// generated. A bed beat with no duration degrades to a zero-length marker
+// rather than failing the whole timeline.
 export function buildTimingTrack(
   beats: ScriptBeat[],
-  transcriptions: Map<string, TranscribeResult>,
-  bedDurations: Map<string, number> = new Map()
+  durations: Map<string, number>
 ): TimingEntry[] {
   const timing: TimingEntry[] = [];
   let cursorSeconds = 0;
 
   for (const beat of beats) {
+    let entry: TimingEntry;
+
     if (beat.type === "narration") {
-      const transcribeResult = transcriptions.get(beat.id);
-      if (!transcribeResult) {
-        throw new Error(`missing transcription for narration beat ${beat.id}`);
+      const duration = durations.get(beat.id);
+      if (duration === undefined) {
+        throw new Error(`missing duration for narration beat ${beat.id}`);
       }
-      const entry = extractBeatTiming(beat, transcribeResult, cursorSeconds);
-      timing.push(entry);
-      cursorSeconds = entry.endSeconds;
+      entry = extractBeatTiming(beat, duration, cursorSeconds);
     } else if (beat.type === "silence") {
-      const entry: TimingEntry = {
+      entry = {
         beatId: beat.id,
         startSeconds: cursorSeconds,
         endSeconds: cursorSeconds + beat.duration,
       };
-      timing.push(entry);
-      cursorSeconds = entry.endSeconds;
     } else {
-      // A bed beat's real duration comes from its audio asset, which this
-      // module doesn't probe — the caller supplies it, having already read
-      // the file, if known. Unknown duration degrades to a zero-length
-      // marker rather than guessing or failing the whole timeline.
-      const duration = bedDurations.get(beat.id) ?? 0;
-      const entry: TimingEntry = {
+      entry = {
         beatId: beat.id,
         startSeconds: cursorSeconds,
-        endSeconds: cursorSeconds + duration,
+        endSeconds: cursorSeconds + (durations.get(beat.id) ?? 0),
       };
-      timing.push(entry);
-      cursorSeconds = entry.endSeconds;
     }
+
+    timing.push(entry);
+    cursorSeconds = entry.endSeconds;
   }
 
   return timing;

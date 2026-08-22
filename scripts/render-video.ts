@@ -2,7 +2,7 @@ import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { renderMermaidToSvg } from "../src/mermaid/renderMermaidToSvg.js";
-import { NarrationClient, type TranscribeResult } from "../src/narration/narrationClient.js";
+import { NarrationClient } from "../src/narration/narrationClient.js";
 import { buildTimingTrack } from "../src/timing/timingExtractor.js";
 import { applyLexicon, mergeLexicons } from "../src/pronunciation/lexicon.js";
 import { parseVideoScript, type VideoScript } from "../src/schema/videoScript.js";
@@ -39,25 +39,30 @@ export async function renderVideo(
     return publicPath;
   }
 
-  const client = new NarrationClient({ baseUrl, profileId });
-  const transcriptions = new Map<string, TranscribeResult>();
-  const bedDurations = new Map<string, number>();
+  // Voicebox returns each generation's real audio length, so narration and
+  // bed beats feed one durations map — there is no transcription step (its
+  // /transcribe endpoint carries no timestamps; see issue #6).
+  const client = new NarrationClient({
+    baseUrl,
+    profileId,
+    audioOutputDir: "generated/narration",
+  });
+  const durations = new Map<string, number>();
   const audioPaths = new Map<string, string>();
 
   for (const beat of videoScript.script) {
     if (beat.type === "narration") {
       const spoken = beat.spoken || applyLexicon(beat.text, lexicon);
-      const generated = await client.generate(spoken);
-      const transcribed = await client.transcribe(generated.audioPath);
-      transcriptions.set(beat.id, transcribed);
-      audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, generated.audioPath));
+      const { audioPath, durationSeconds } = await client.generate(spoken);
+      durations.set(beat.id, durationSeconds);
+      audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, audioPath));
     } else if (beat.type === "bed") {
-      bedDurations.set(beat.id, await probeAudioDurationSeconds(beat.audio));
+      durations.set(beat.id, await probeAudioDurationSeconds(beat.audio));
       audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, beat.audio));
     }
   }
 
-  const timing = buildTimingTrack(videoScript.script, transcriptions, bedDurations).map(
+  const timing = buildTimingTrack(videoScript.script, durations).map(
     (entry) => {
       const audioPath = audioPaths.get(entry.beatId);
       return audioPath ? { ...entry, audioPath } : entry;

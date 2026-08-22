@@ -1,78 +1,253 @@
-import { describe, expect, it, vi } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NarrationClient } from "./narrationClient.js";
 
-describe("NarrationClient", () => {
-  it("posts spoken text to /generate and returns the audio path", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ audio_path: "/tmp/beat_01.wav" }),
+const BASE = "http://127.0.0.1:17493";
+const WAV_BYTES = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x00, 0x01, 0x02, 0x03]);
+
+function jsonResponse(body: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  };
+}
+
+function wavResponse(status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    arrayBuffer: async () => WAV_BYTES.buffer.slice(0),
+  };
+}
+
+// Routes a mocked fetch by URL and records every call. Only the network is
+// mocked; URL routing, body shape, status handling, polling, and the file
+// write are all real client behavior under test.
+function routedFetch(
+  historyStatuses: Array<Record<string, unknown>>,
+  options: { generateStatus?: number; exportStatus?: number } = {}
+) {
+  let historyCall = 0;
+  const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === `${BASE}/generate`) {
+      return jsonResponse(
+        { id: "gen-123", status: "generating", audio_path: "" },
+        options.generateStatus ?? 200
+      );
+    }
+    if (url === `${BASE}/history/gen-123/export-audio`) {
+      return wavResponse(options.exportStatus ?? 200);
+    }
+    if (url === `${BASE}/history/gen-123`) {
+      const body = historyStatuses[Math.min(historyCall, historyStatuses.length - 1)];
+      historyCall += 1;
+      return jsonResponse(body);
+    }
+    throw new Error(`unexpected fetch: ${init?.method ?? "GET"} ${url}`);
+  });
+  return fetchImpl as unknown as typeof fetch & ReturnType<typeof vi.fn>;
+}
+
+describe("NarrationClient.generate", () => {
+  let audioOutputDir: string;
+  const sleepImpl = vi.fn(async () => {});
+
+  beforeEach(() => {
+    audioOutputDir = mkdtempSync(join(tmpdir(), "cuecast-narration-"));
+    sleepImpl.mockClear();
+  });
+
+  afterEach(() => {
+    rmSync(audioOutputDir, { recursive: true, force: true });
+  });
+
+  it("posts text, profile and engine to /generate", async () => {
+    const fetchImpl = routedFetch([{ status: "completed", duration: 3.22, error: null }]);
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      engine: "chatterbox",
+      fetchImpl,
+      sleepImpl,
     });
 
+    await client.generate("hello world");
+
+    const generateCall = fetchImpl.mock.calls.find(([url]) => url === `${BASE}/generate`);
+    expect(generateCall).toBeDefined();
+    const [, init] = generateCall!;
+    expect(init).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        headers: { "content-type": "application/json" },
+      })
+    );
+    expect(JSON.parse(init.body as string)).toEqual({
+      text: "hello world",
+      profile_id: "test-profile",
+      engine: "chatterbox",
+    });
+  });
+
+  it("defaults the engine to chatterbox when none is configured", async () => {
+    const fetchImpl = routedFetch([{ status: "completed", duration: 1, error: null }]);
     const client = new NarrationClient({
-      baseUrl: "http://127.0.0.1:17493",
+      baseUrl: BASE,
       profileId: "test-profile",
-      fetchImpl: fetchImpl as unknown as typeof fetch,
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
+    });
+
+    await client.generate("hi");
+
+    const [, init] = fetchImpl.mock.calls.find(([url]) => url === `${BASE}/generate`)!;
+    expect(JSON.parse(init.body as string).engine).toBe("chatterbox");
+  });
+
+  it("polls /history until completed, then returns the duration and a local audio file", async () => {
+    const fetchImpl = routedFetch([
+      { status: "loading_model", duration: 0, error: null },
+      { status: "generating", duration: 0, error: null },
+      { status: "completed", duration: 3.22, error: null },
+    ]);
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
+      pollIntervalMs: 1000,
     });
 
     const result = await client.generate("hello world");
 
-    expect(result.audioPath).toBe("/tmp/beat_01.wav");
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchImpl.mock.calls[0];
-    expect(url).toBe("http://127.0.0.1:17493/generate");
-    expect(options).toEqual(
-      expect.objectContaining({
-        method: "POST",
-        headers: { "content-type": "application/json" },
-      })
+    expect(result.durationSeconds).toBe(3.22);
+    expect(result.audioPath).toBe(join(audioOutputDir, "gen-123.wav"));
+    expect(existsSync(result.audioPath)).toBe(true);
+    expect(new Uint8Array(readFileSync(result.audioPath))).toEqual(WAV_BYTES);
+
+    const historyCalls = fetchImpl.mock.calls.filter(
+      ([url]) => url === `${BASE}/history/gen-123`
     );
-    expect(JSON.parse(options.body as string)).toEqual({
-      text: "hello world",
-      profile_id: "test-profile",
-    });
+    expect(historyCalls).toHaveLength(3);
+    // slept once between each non-terminal poll, never after completion
+    expect(sleepImpl).toHaveBeenCalledTimes(2);
+    expect(sleepImpl).toHaveBeenCalledWith(1000);
   });
 
-  it("posts an audio path to /transcribe and returns segments", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        segments: [{ text: "hello world", start: 0.0, end: 1.2 }],
-      }),
-    });
-
-    const client = new NarrationClient({
-      baseUrl: "http://127.0.0.1:17493",
-      profileId: "test-profile",
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
-
-    const result = await client.transcribe("/tmp/beat_01.wav");
-
-    expect(result.segments).toEqual([
-      { text: "hello world", startSeconds: 0.0, endSeconds: 1.2, words: undefined },
+  it("throws with the server's error message when the generation fails", async () => {
+    const fetchImpl = routedFetch([
+      { status: "generating", duration: 0, error: null },
+      { status: "failed", duration: 0, error: "Server was shut down during generation" },
     ]);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchImpl.mock.calls[0];
-    expect(url).toBe("http://127.0.0.1:17493/transcribe");
-    expect(options).toEqual(
-      expect.objectContaining({
-        method: "POST",
-        headers: { "content-type": "application/json" },
-      })
-    );
-    expect(JSON.parse(options.body as string)).toEqual({
-      audio_path: "/tmp/beat_01.wav",
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
     });
+
+    await expect(client.generate("hello")).rejects.toThrow(
+      /gen-123.*Server was shut down during generation/
+    );
+    expect(existsSync(join(audioOutputDir, "gen-123.wav"))).toBe(false);
   });
 
-  it("throws when the service responds with a non-ok status", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+  it("throws when a generation completes without reporting a duration", async () => {
+    // duration drives beat timing, so a completed generation with no
+    // duration is unusable. Defaulting it to 0 would produce a silent
+    // zero-length beat that buildTimingTrack cannot tell from a real one.
+    const fetchImpl = routedFetch([{ status: "completed", duration: null, error: null }]);
     const client = new NarrationClient({
-      baseUrl: "http://127.0.0.1:17493",
+      baseUrl: BASE,
       profileId: "test-profile",
-      fetchImpl: fetchImpl as unknown as typeof fetch,
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
     });
 
-    await expect(client.generate("hello")).rejects.toThrow(/500/);
+    await expect(client.generate("hello")).rejects.toThrow(/gen-123.*completed.*no duration/);
+    expect(existsSync(join(audioOutputDir, "gen-123.wav"))).toBe(false);
+  });
+
+  it("keeps polling through an unrecognized status rather than treating it as terminal", async () => {
+    // Characterization test: locks in that only completed/failed end the
+    // loop, so a new non-terminal status Voicebox might add (e.g. "queued")
+    // can't be mistaken for success or failure.
+    const fetchImpl = routedFetch([
+      { status: "queued", duration: 0, error: null },
+      { status: "completed", duration: 1.5, error: null },
+    ]);
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
+    });
+
+    const result = await client.generate("hello");
+
+    expect(result.durationSeconds).toBe(1.5);
+    expect(sleepImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws once the poll timeout elapses without completion", async () => {
+    // A wedged server reports loading_model forever with error: null — the
+    // failure mode that hung the first live run. The fake clock advances
+    // 5s per poll; a 12s budget must give up on the third poll.
+    let fakeNow = 0;
+    const fetchImpl = routedFetch([{ status: "loading_model", duration: 0, error: null }]);
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl: async () => {
+        fakeNow += 5000;
+      },
+      now: () => fakeNow,
+      timeoutMs: 12_000,
+    });
+
+    await expect(client.generate("hello")).rejects.toThrow(/timed out.*12000.*loading_model/);
+    const historyCalls = fetchImpl.mock.calls.filter(
+      ([url]) => url === `${BASE}/history/gen-123`
+    );
+    expect(historyCalls).toHaveLength(3);
+  });
+
+  it("throws when /generate responds with a non-ok status", async () => {
+    const fetchImpl = routedFetch([], { generateStatus: 500 });
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
+    });
+
+    await expect(client.generate("hello")).rejects.toThrow(/\/generate.*500/);
+  });
+
+  it("throws when export-audio responds with a non-ok status", async () => {
+    const fetchImpl = routedFetch([{ status: "completed", duration: 1, error: null }], {
+      exportStatus: 404,
+    });
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
+    });
+
+    await expect(client.generate("hello")).rejects.toThrow(/export-audio.*404/);
   });
 });

@@ -18,10 +18,12 @@ artifact.
 
 **The core mechanism (the timing inversion):** conventional order is animate,
 then cut narration to fit, which makes every script edit expensive. cuecast
-generates narration first, transcribes it back to get real timestamps, and
-writes those timestamps into the script file. The renderer reads timing via
-expressions rather than hand-placed keyframes, so reveals land on the
-narration automatically and a script edit re-syncs on rebuild.
+generates narration first, takes each clip's real duration from the TTS
+service, and writes those timings into the script file. The renderer reads
+timing via expressions rather than hand-placed keyframes, so reveals land on
+the narration automatically and a script edit re-syncs on rebuild. (The
+original draft transcribed the audio back for timestamps; that stage was
+removed once the real service proved to return none — see §6.)
 
 ## 2 · Decision taken here: diagrams are Mermaid, not a bespoke schema
 
@@ -73,10 +75,9 @@ resolves it before implementation locks in.
 ```
 
 - `text` is what appears in captions and docs; `spoken` is what goes to the
-  TTS API. This split exists because respelling breaks the transcribe round
-  trip (see §5) — Whisper transcribes the sound it was given back, and
-  `vih-BRY` will not match `text` word-for-word. Timing extraction aligns on
-  segment boundaries, not word-matching against `text`.
+  TTS API. The split keeps the respelling (`vih-BRY`) out of anything a
+  viewer reads, and keeps `text` free to be word-matched or captioned
+  without the respelling leaking through (see §5).
 - `script` entries are typed (`narration` | `silence` | `bed`), not implicitly
   narration-only. Silence is a first-class beat with an explicit duration,
   not an incidental gap — a script that only ever narrates cannot represent
@@ -99,8 +100,7 @@ resolves it before implementation locks in.
 | Stage | Tool | Automation |
 |---|---|---|
 | Diagram → SVG | `mmdc` (Mermaid CLI, headless Chrome) | full |
-| Narration | local TTS service `POST /generate` | full |
-| Timing extraction | local TTS service `POST /transcribe` (Whisper) | full |
+| Narration + timing | local TTS service `POST /generate` → poll `/history/{id}` → `export-audio`; the completed generation's `duration` is the beat's timing | full |
 | Compose + animate | Remotion, reading `video.json` as data | full |
 | Render | `npx remotion render` | full |
 | Encode | ffmpeg (Remotion's own pipeline) | full |
@@ -178,12 +178,15 @@ engines.
   it's being read on a phone. Expect some diagrams to need a video-specific
   variant rather than reusing the docs rendering verbatim; this is real
   authoring work, not a defect in the approach.
-- **Whisper timestamp granularity — open, unresolved, carried from the
-  originating brief.** Segment-level timestamps are workable (reveals snap to
-  phrase boundaries); word-level would allow tighter emphasis sync. Verify
-  against a real `/transcribe` response before the timing-extraction stage is
-  considered done — this gates the whole timing inversion, independent of
-  which render approach is used.
+- **Whisper timestamp granularity — RESOLVED 2026-08-22: there are none.**
+  The real service's `/transcribe` returns only `{text, duration}` — neither
+  segment- nor word-level timestamps — so the transcription stage was removed
+  and timing comes from the completed `/generate` response's `duration`
+  (verified exact against ffprobe). Granularity is therefore one span per
+  beat. Tighter within-beat emphasis sync would need a different engine or a
+  local forced aligner — a separate decision. Full evidence, including why
+  `/transcribe` was also rejected as a pronunciation check, lives in
+  `spikes/narration-granularity/README.md`.
 - **Cross-product lexicon collisions.** A term correct for one product's
   pronunciation might be wrong for another's brand voice (a shared acronym
   read differently by two products). Low risk in practice since each
@@ -197,8 +200,8 @@ engines.
 1. **Mermaid-addressability spike** (§6) — the one unknown that determines
    whether `revealGroups` as specified is buildable at all. Do this first;
    everything else assumes its answer.
-2. `video.json` schema (this doc, §3) + narration service `/generate` +
-   `/transcribe` round trip; verify Whisper timestamp granularity; run the
+2. `video.json` schema (this doc, §3) + narration service `/generate`
+   round trip (poll to completion, fetch audio, take `duration`); run the
    pronunciation fixture test against a real profile to lock the base
    lexicon. Independent of step 1 — can run in parallel.
 3. Remotion composition consuming one real Mermaid SVG + a hand-written

@@ -15,7 +15,9 @@ if (!baseUrl || !profileId) {
 const outputDir = "generated/fixture-test";
 mkdirSync(outputDir, { recursive: true });
 
-const client = new NarrationClient({ baseUrl, profileId });
+// Generated WAVs land in outputDir itself, which is exactly where the
+// procedure tells the listener to look.
+const client = new NarrationClient({ baseUrl, profileId, audioOutputDir: outputDir });
 const results: Array<{ term: string; respelling: string; audioPath: string }> = [];
 
 for (const [term, respelling] of Object.entries(baseLexicon)) {
