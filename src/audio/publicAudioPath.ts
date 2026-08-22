@@ -17,16 +17,19 @@ export function publicAudioPath(videoId: string, beatId: string, sourcePath: str
   return `audio/${videoId}/${beatId}${extname(sourcePath)}`;
 }
 
-// The separator check is the load-bearing one for traversal: without a
-// separator, ".." can never become its own path segment, so positional
-// forms like "../x" or "x/../y" are already rejected and are deliberately
-// not re-checked. A substring such as "a..b" is allowed — it is a literal
-// directory name.
+// Two checks, two different hazards.
 //
-// The second check is about collisions, not traversal: "", "." and ".." are
-// the only segments that don't name a real directory. "" and "." normalize
-// away (`audio//x` and `audio/./x` both become `audio/x`), which silently
-// undoes the per-video namespacing this function exists to provide.
+// Traversal: the separator check is load-bearing. Without a separator, ".."
+// can never become its own path segment, so positional forms like "../x" or
+// "x/../y" are already rejected and are deliberately not re-checked. The one
+// traversal case that survives it is an id that IS "..": as a whole segment
+// it walks up and out (`audio/../x` becomes `x`, landing in public/ instead
+// of public/audio/). A substring such as "a..b" is a literal directory name
+// and is allowed.
+//
+// Collision: "" and "." don't name a directory at all — they normalize away
+// (`audio//x` and `audio/./x` both become `audio/x`), which silently undoes
+// the per-video namespacing this function exists to provide.
 function assertPathSafeId(id: string, label: string): void {
   if (id.includes("/") || id.includes("\\")) {
     throw new Error(`${label} "${id}" must not contain a path separator`);
