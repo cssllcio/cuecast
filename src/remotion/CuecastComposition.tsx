@@ -8,6 +8,7 @@ import {
   useVideoConfig,
 } from "remotion";
 import type { VideoScript } from "../schema/videoScript.js";
+import { secondsToFrame } from "../timing/frames.js";
 
 export interface CuecastCompositionProps {
   videoScript: VideoScript;
@@ -37,10 +38,10 @@ export function buildAudioSequences(
     .filter((entry) => Boolean(entry.audioPath))
     .map((entry) => ({
       audioPath: entry.audioPath as string,
-      fromFrame: Math.round(entry.startSeconds * fps),
-      durationInFrames: Math.round(
-        (entry.endSeconds - entry.startSeconds) * fps
-      ),
+      // A position and a span on the timeline: nearest frame, not ceil —
+      // see src/timing/frames.ts for why the two conversions differ.
+      fromFrame: secondsToFrame(entry.startSeconds, fps),
+      durationInFrames: secondsToFrame(entry.endSeconds - entry.startSeconds, fps),
     }));
 }
 

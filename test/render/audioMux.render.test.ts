@@ -1,9 +1,11 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import { cuecastWebpackOverride } from "../../src/remotion/webpackOverride.js";
+import { publicAudioPath } from "../../src/audio/publicAudioPath.js";
 import type { VideoScript } from "../../src/schema/videoScript.js";
 
 describe("Cuecast composition audio muxing", () => {
@@ -21,8 +23,11 @@ describe("Cuecast composition audio muxing", () => {
     // reached the component (it renders whatever selectComposition already
     // resolved), so inputProps must be passed to selectComposition too. See
     // the matching comment in scripts/render-video.ts.
-    mkdirSync("public/audio", { recursive: true });
-    copyFileSync("test/fixtures/tone.wav", "public/audio/beat_bed.wav");
+    // Build the public path with the real helper so this test exercises the
+    // same video-id namespacing scripts/render-video.ts uses (issue #4).
+    const bedPublicPath = publicAudioPath("audio_mux_proof", "beat_bed", "test/fixtures/tone.wav");
+    mkdirSync(dirname(`public/${bedPublicPath}`), { recursive: true });
+    copyFileSync("test/fixtures/tone.wav", `public/${bedPublicPath}`);
 
     const videoScript: VideoScript = {
       id: "audio_mux_proof",
@@ -34,7 +39,7 @@ describe("Cuecast composition audio muxing", () => {
           beatId: "beat_bed",
           startSeconds: 0,
           endSeconds: 1,
-          audioPath: "audio/beat_bed.wav",
+          audioPath: bedPublicPath,
         },
       ],
     };

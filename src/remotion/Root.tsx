@@ -5,6 +5,7 @@ import {
   type CuecastCompositionProps,
 } from "./CuecastComposition.js";
 import { parseVideoScript } from "../schema/videoScript.js";
+import { secondsToDurationFrames } from "../timing/frames.js";
 import proofFixture from "../../test/fixtures/render-proof-video.json" with { type: "json" };
 // A durable, checked-in fixture (see test/fixtures/render-proof-video.svg) —
 // generated once from generic-container.mmd via renderMermaidToSvg and
@@ -22,6 +23,7 @@ import proofFixture from "../../test/fixtures/render-proof-video.json" with { ty
 import svgContent from "../../test/fixtures/render-proof-video.svg?raw";
 
 const videoScript = parseVideoScript(proofFixture);
+const FPS = 30;
 
 const RootComponent: React.FC = () => {
   const lastTiming = videoScript.timing.at(-1);
@@ -31,8 +33,8 @@ const RootComponent: React.FC = () => {
     <Composition<any, CuecastCompositionProps & Record<string, unknown>>
       id="Cuecast"
       component={CuecastComposition}
-      durationInFrames={Math.ceil(durationInSeconds * 30)}
-      fps={30}
+      durationInFrames={secondsToDurationFrames(durationInSeconds, FPS)}
+      fps={FPS}
       width={1080}
       height={1920}
       defaultProps={{ videoScript, svgContent }}

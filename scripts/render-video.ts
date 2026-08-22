@@ -1,4 +1,5 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { renderMermaidToSvg } from "../src/mermaid/renderMermaidToSvg.js";
@@ -9,6 +10,7 @@ import { parseVideoScript, type VideoScript } from "../src/schema/videoScript.js
 import { cuecastWebpackOverride } from "../src/remotion/webpackOverride.js";
 import { publicAudioPath } from "../src/audio/publicAudioPath.js";
 import { probeAudioDurationSeconds } from "../src/audio/probeAudioDuration.js";
+import { secondsToDurationFrames } from "../src/timing/frames.js";
 import baseLexicon from "../lexicon/base.json" with { type: "json" };
 
 export async function renderVideo(
@@ -33,9 +35,13 @@ export async function renderVideo(
   // already resolves this same constraint) before bundle() runs, below.
   mkdirSync("public/audio", { recursive: true });
 
+  // Audio is namespaced under the video id (issue #4) so two videos that
+  // reuse a beat id can't clobber each other in public/audio/.
   function copyBeatAudioToPublic(beatId: string, sourcePath: string): string {
-    const publicPath = publicAudioPath(beatId, sourcePath);
-    copyFileSync(sourcePath, `public/${publicPath}`);
+    const publicPath = publicAudioPath(videoScript.id, beatId, sourcePath);
+    const destination = `public/${publicPath}`;
+    mkdirSync(dirname(destination), { recursive: true });
+    copyFileSync(sourcePath, destination);
     return publicPath;
   }
 
@@ -115,8 +121,9 @@ export async function renderVideo(
   await renderMedia({
     composition: {
       ...composition,
-      durationInFrames: Math.ceil(
-        (finalVideoScript.timing.at(-1)?.endSeconds ?? 5) * 30
+      durationInFrames: secondsToDurationFrames(
+        finalVideoScript.timing.at(-1)?.endSeconds ?? 5,
+        composition.fps
       ),
     },
     serveUrl: bundleLocation,
