@@ -159,6 +159,45 @@ describe("NarrationClient.generate", () => {
     expect(existsSync(join(audioOutputDir, "gen-123.wav"))).toBe(false);
   });
 
+  it("throws when a generation completes without reporting a duration", async () => {
+    // duration drives beat timing, so a completed generation with no
+    // duration is unusable. Defaulting it to 0 would produce a silent
+    // zero-length beat that buildTimingTrack cannot tell from a real one.
+    const fetchImpl = routedFetch([{ status: "completed", duration: null, error: null }]);
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
+    });
+
+    await expect(client.generate("hello")).rejects.toThrow(/gen-123.*completed.*no duration/);
+    expect(existsSync(join(audioOutputDir, "gen-123.wav"))).toBe(false);
+  });
+
+  it("keeps polling through an unrecognized status rather than treating it as terminal", async () => {
+    // Characterization test: locks in that only completed/failed end the
+    // loop, so a new non-terminal status Voicebox might add (e.g. "queued")
+    // can't be mistaken for success or failure.
+    const fetchImpl = routedFetch([
+      { status: "queued", duration: 0, error: null },
+      { status: "completed", duration: 1.5, error: null },
+    ]);
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
+    });
+
+    const result = await client.generate("hello");
+
+    expect(result.durationSeconds).toBe(1.5);
+    expect(sleepImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("throws once the poll timeout elapses without completion", async () => {
     // A wedged server reports loading_model forever with error: null — the
     // failure mode that hung the first live run. The fake clock advances

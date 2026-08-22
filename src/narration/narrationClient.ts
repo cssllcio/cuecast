@@ -112,7 +112,14 @@ export class NarrationClient {
       lastStatus = body.status;
 
       if (body.status === "completed") {
-        return body.duration ?? 0;
+        // duration drives beat timing; a completed generation without one is
+        // unusable. Defaulting to 0 would yield a silent zero-length beat
+        // indistinguishable from a real one — the same class of silent
+        // failure that shipped in issue #1 and the PR #3 inputProps bug.
+        if (body.duration === null || body.duration === undefined) {
+          throw new Error(`narration generation ${id} completed with no duration reported`);
+        }
+        return body.duration;
       }
       if (body.status === "failed") {
         throw new Error(`narration generation ${id} failed: ${body.error ?? "unknown error"}`);
