@@ -52,4 +52,22 @@ describe("buildTimingTrack", () => {
     const beats: ScriptBeat[] = [narrationBeat];
     expect(() => buildTimingTrack(beats, new Map())).toThrow(/beat_01/);
   });
+
+  it("advances the cursor by a bed beat's known duration instead of a zero-length marker", () => {
+    const beats: ScriptBeat[] = [
+      { id: "beat_03", type: "bed", audio: "clip.wav", duck: [] },
+      { id: "beat_04", type: "silence", duration: 1 },
+    ];
+
+    const timing = buildTimingTrack(
+      beats,
+      new Map(),
+      new Map([["beat_03", 6.2]])
+    );
+
+    expect(timing).toEqual([
+      { beatId: "beat_03", startSeconds: 0, endSeconds: 6.2 },
+      { beatId: "beat_04", startSeconds: 6.2, endSeconds: 7.2 },
+    ]);
+  });
 });

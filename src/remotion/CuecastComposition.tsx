@@ -1,10 +1,47 @@
 import React from "react";
-import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
+import {
+  AbsoluteFill,
+  Audio,
+  Sequence,
+  staticFile,
+  useCurrentFrame,
+  useVideoConfig,
+} from "remotion";
 import type { VideoScript } from "../schema/videoScript.js";
 
 export interface CuecastCompositionProps {
   videoScript: VideoScript;
   svgContent: string;
+}
+
+export interface AudioSequenceSpec {
+  audioPath: string;
+  fromFrame: number;
+  durationInFrames: number;
+}
+
+// Every timing entry with an audioPath (narration audio, or a bed beat's
+// supplied clip — see scripts/render-video.ts) gets its own Sequence, keyed
+// to when that beat starts on the real timeline. durationInFrames bounds
+// the Sequence to that beat's own timing span: a beat's timeline duration
+// comes from Whisper's transcribed segment boundaries, not the generated
+// audio file's own (possibly padded) length, so leaving the Sequence
+// unbounded would let one beat's audio bleed into the next beat's window.
+// A pure function so this mapping is unit-testable without rendering the
+// composition.
+export function buildAudioSequences(
+  videoScript: VideoScript,
+  fps: number
+): AudioSequenceSpec[] {
+  return videoScript.timing
+    .filter((entry) => Boolean(entry.audioPath))
+    .map((entry) => ({
+      audioPath: entry.audioPath as string,
+      fromFrame: Math.round(entry.startSeconds * fps),
+      durationInFrames: Math.round(
+        (entry.endSeconds - entry.startSeconds) * fps
+      ),
+    }));
 }
 
 export const CuecastComposition: React.FC<CuecastCompositionProps> = ({
@@ -24,6 +61,8 @@ export const CuecastComposition: React.FC<CuecastCompositionProps> = ({
     }
   }
 
+  const audioSequences = buildAudioSequences(videoScript, fps);
+
   return (
     <AbsoluteFill style={{ backgroundColor: "white" }}>
       <div
@@ -36,6 +75,15 @@ export const CuecastComposition: React.FC<CuecastCompositionProps> = ({
           ),
         }}
       />
+      {audioSequences.map((sequence) => (
+        <Sequence
+          key={sequence.audioPath}
+          from={sequence.fromFrame}
+          durationInFrames={sequence.durationInFrames}
+        >
+          <Audio src={staticFile(sequence.audioPath)} />
+        </Sequence>
+      ))}
     </AbsoluteFill>
   );
 };

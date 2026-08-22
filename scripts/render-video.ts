@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { renderMermaidToSvg } from "../src/mermaid/renderMermaidToSvg.js";
@@ -7,6 +7,8 @@ import { buildTimingTrack } from "../src/timing/timingExtractor.js";
 import { applyLexicon, mergeLexicons } from "../src/pronunciation/lexicon.js";
 import { parseVideoScript, type VideoScript } from "../src/schema/videoScript.js";
 import { cuecastWebpackOverride } from "../src/remotion/webpackOverride.js";
+import { publicAudioPath } from "../src/audio/publicAudioPath.js";
+import { probeAudioDurationSeconds } from "../src/audio/probeAudioDuration.js";
 import baseLexicon from "../lexicon/base.json" with { type: "json" };
 
 export async function renderVideo(
@@ -25,18 +27,42 @@ export async function renderVideo(
   const videoScript: VideoScript = parseVideoScript(rawJson);
   const lexicon = mergeLexicons(baseLexicon, videoScript.pronunciations);
 
-  const client = new NarrationClient({ baseUrl, profileId });
-  const transcriptions = new Map<string, TranscribeResult>();
+  // Remotion renders the composition inside a headless browser, which can't
+  // read arbitrary filesystem paths — audio has to be copied into public/
+  // (Remotion's static-asset convention, matching how Root.tsx's SVG fixture
+  // already resolves this same constraint) before bundle() runs, below.
+  mkdirSync("public/audio", { recursive: true });
 
-  for (const beat of videoScript.script) {
-    if (beat.type !== "narration") continue;
-    const spoken = beat.spoken || applyLexicon(beat.text, lexicon);
-    const generated = await client.generate(spoken);
-    const transcribed = await client.transcribe(generated.audioPath);
-    transcriptions.set(beat.id, transcribed);
+  function copyBeatAudioToPublic(beatId: string, sourcePath: string): string {
+    const publicPath = publicAudioPath(beatId, sourcePath);
+    copyFileSync(sourcePath, `public/${publicPath}`);
+    return publicPath;
   }
 
-  const timing = buildTimingTrack(videoScript.script, transcriptions);
+  const client = new NarrationClient({ baseUrl, profileId });
+  const transcriptions = new Map<string, TranscribeResult>();
+  const bedDurations = new Map<string, number>();
+  const audioPaths = new Map<string, string>();
+
+  for (const beat of videoScript.script) {
+    if (beat.type === "narration") {
+      const spoken = beat.spoken || applyLexicon(beat.text, lexicon);
+      const generated = await client.generate(spoken);
+      const transcribed = await client.transcribe(generated.audioPath);
+      transcriptions.set(beat.id, transcribed);
+      audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, generated.audioPath));
+    } else if (beat.type === "bed") {
+      bedDurations.set(beat.id, await probeAudioDurationSeconds(beat.audio));
+      audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, beat.audio));
+    }
+  }
+
+  const timing = buildTimingTrack(videoScript.script, transcriptions, bedDurations).map(
+    (entry) => {
+      const audioPath = audioPaths.get(entry.beatId);
+      return audioPath ? { ...entry, audioPath } : entry;
+    }
+  );
   const finalVideoScript: VideoScript = { ...videoScript, timing };
 
   // renderMermaidToSvg (and mmdc underneath it) refuses to write into a
@@ -63,9 +89,22 @@ export async function renderVideo(
     entryPoint: "src/remotion/Root.tsx",
     webpackOverride: cuecastWebpackOverride,
   });
+  const inputProps = { videoScript: finalVideoScript, svgContent };
+
+  // inputProps MUST be passed to selectComposition, not only renderMedia.
+  // selectComposition resolves the composition's metadata (including its
+  // props) once and freezes it; renderMedia's own `composition` argument
+  // (built from that frozen metadata below) short-circuits the in-browser
+  // prop-resolution path renderMedia would otherwise use to merge inputProps
+  // in. Passing inputProps only to renderMedia compiles and renders — using
+  // Root.tsx's hardcoded default props instead, silently — which is exactly
+  // how this went unnoticed: confirmed by a debug probe showing the
+  // component receiving Root.tsx's fixture videoScript.id regardless of
+  // what was passed to renderMedia alone.
   const composition = await selectComposition({
     serveUrl: bundleLocation,
     id: "Cuecast",
+    inputProps,
   });
 
   await renderMedia({
@@ -78,6 +117,6 @@ export async function renderVideo(
     serveUrl: bundleLocation,
     codec: "h264",
     outputLocation: outputPath,
-    inputProps: { videoScript: finalVideoScript, svgContent },
+    inputProps,
   });
 }
