@@ -1,10 +1,38 @@
 import React from "react";
-import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
+import {
+  AbsoluteFill,
+  Audio,
+  Sequence,
+  staticFile,
+  useCurrentFrame,
+  useVideoConfig,
+} from "remotion";
 import type { VideoScript } from "../schema/videoScript.js";
 
 export interface CuecastCompositionProps {
   videoScript: VideoScript;
   svgContent: string;
+}
+
+export interface AudioSequenceSpec {
+  audioPath: string;
+  fromFrame: number;
+}
+
+// Every timing entry with an audioPath (narration audio, or a bed beat's
+// supplied clip — see scripts/render-video.ts) gets its own Sequence, keyed
+// to when that beat starts on the real timeline. A pure function so this
+// mapping is unit-testable without rendering the composition.
+export function buildAudioSequences(
+  videoScript: VideoScript,
+  fps: number
+): AudioSequenceSpec[] {
+  return videoScript.timing
+    .filter((entry) => Boolean(entry.audioPath))
+    .map((entry) => ({
+      audioPath: entry.audioPath as string,
+      fromFrame: Math.round(entry.startSeconds * fps),
+    }));
 }
 
 export const CuecastComposition: React.FC<CuecastCompositionProps> = ({
@@ -24,6 +52,8 @@ export const CuecastComposition: React.FC<CuecastCompositionProps> = ({
     }
   }
 
+  const audioSequences = buildAudioSequences(videoScript, fps);
+
   return (
     <AbsoluteFill style={{ backgroundColor: "white" }}>
       <div
@@ -36,6 +66,11 @@ export const CuecastComposition: React.FC<CuecastCompositionProps> = ({
           ),
         }}
       />
+      {audioSequences.map((sequence) => (
+        <Sequence key={sequence.audioPath} from={sequence.fromFrame}>
+          <Audio src={staticFile(sequence.audioPath)} />
+        </Sequence>
+      ))}
     </AbsoluteFill>
   );
 };

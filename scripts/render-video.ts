@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { renderMermaidToSvg } from "../src/mermaid/renderMermaidToSvg.js";
@@ -7,6 +7,8 @@ import { buildTimingTrack } from "../src/timing/timingExtractor.js";
 import { applyLexicon, mergeLexicons } from "../src/pronunciation/lexicon.js";
 import { parseVideoScript, type VideoScript } from "../src/schema/videoScript.js";
 import { cuecastWebpackOverride } from "../src/remotion/webpackOverride.js";
+import { publicAudioPath } from "../src/audio/publicAudioPath.js";
+import { probeAudioDurationSeconds } from "../src/audio/probeAudioDuration.js";
 import baseLexicon from "../lexicon/base.json" with { type: "json" };
 
 export async function renderVideo(
@@ -25,18 +27,43 @@ export async function renderVideo(
   const videoScript: VideoScript = parseVideoScript(rawJson);
   const lexicon = mergeLexicons(baseLexicon, videoScript.pronunciations);
 
+  // Remotion renders the composition inside a headless browser, which can't
+  // read arbitrary filesystem paths — audio has to be copied into public/
+  // (Remotion's static-asset convention, matching how Root.tsx's SVG fixture
+  // already resolves this same constraint) before bundle() runs, below.
+  mkdirSync("public/audio", { recursive: true });
+
   const client = new NarrationClient({ baseUrl, profileId });
   const transcriptions = new Map<string, TranscribeResult>();
+  const bedDurations = new Map<string, number>();
+  const audioPaths = new Map<string, string>();
 
   for (const beat of videoScript.script) {
-    if (beat.type !== "narration") continue;
-    const spoken = beat.spoken || applyLexicon(beat.text, lexicon);
-    const generated = await client.generate(spoken);
-    const transcribed = await client.transcribe(generated.audioPath);
-    transcriptions.set(beat.id, transcribed);
+    if (beat.type === "narration") {
+      const spoken = beat.spoken || applyLexicon(beat.text, lexicon);
+      const generated = await client.generate(spoken);
+      const transcribed = await client.transcribe(generated.audioPath);
+      transcriptions.set(beat.id, transcribed);
+
+      const publicPath = publicAudioPath(beat.id, generated.audioPath);
+      copyFileSync(generated.audioPath, `public/${publicPath}`);
+      audioPaths.set(beat.id, publicPath);
+    } else if (beat.type === "bed") {
+      const duration = await probeAudioDurationSeconds(beat.audio);
+      bedDurations.set(beat.id, duration);
+
+      const publicPath = publicAudioPath(beat.id, beat.audio);
+      copyFileSync(beat.audio, `public/${publicPath}`);
+      audioPaths.set(beat.id, publicPath);
+    }
   }
 
-  const timing = buildTimingTrack(videoScript.script, transcriptions);
+  const timing = buildTimingTrack(videoScript.script, transcriptions, bedDurations).map(
+    (entry) => {
+      const audioPath = audioPaths.get(entry.beatId);
+      return audioPath ? { ...entry, audioPath } : entry;
+    }
+  );
   const finalVideoScript: VideoScript = { ...videoScript, timing };
 
   // renderMermaidToSvg (and mmdc underneath it) refuses to write into a

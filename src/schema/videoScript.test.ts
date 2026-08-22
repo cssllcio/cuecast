@@ -45,4 +45,24 @@ describe("parseVideoScript", () => {
     };
     expect(() => parseVideoScript(invalid)).toThrow();
   });
+
+  it("accepts a timing entry with an audioPath and preserves it", () => {
+    const withAudio = {
+      ...validScript,
+      timing: [
+        { beatId: "beat_01", startSeconds: 0, endSeconds: 2.4, audioPath: "audio/beat_01.wav" },
+      ],
+    };
+    const parsed = parseVideoScript(withAudio);
+    expect(parsed.timing[0].audioPath).toBe("audio/beat_01.wav");
+  });
+
+  it("accepts a timing entry with no audioPath", () => {
+    const withoutAudio = {
+      ...validScript,
+      timing: [{ beatId: "beat_01", startSeconds: 0, endSeconds: 2.4 }],
+    };
+    const parsed = parseVideoScript(withoutAudio);
+    expect(parsed.timing[0].audioPath).toBeUndefined();
+  });
 });

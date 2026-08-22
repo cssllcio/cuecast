@@ -31,6 +31,7 @@ const timingEntrySchema = z.object({
   beatId: z.string(),
   startSeconds: z.number().nonnegative(),
   endSeconds: z.number().nonnegative(),
+  audioPath: z.string().optional(),
 });
 
 const videoScriptSchema = z.object({
