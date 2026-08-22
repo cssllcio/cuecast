@@ -30,8 +30,17 @@ describe("publicAudioPath", () => {
     ["beat id with a slash", "video", "be/at"],
     ["beat id that is a bare parent reference", "video", ".."],
     ["beat id with a parent reference segment", "video", "../beat"],
+    // Not traversal, but both normalize the segment away — `audio//x` and
+    // `audio/./x` collapse to `audio/x` — silently undoing the per-video
+    // namespacing and recreating the exact collision issue #4 is about.
+    ["video id that is empty", "", "beat_01"],
+    ["video id that is a bare current-directory reference", ".", "beat_01"],
+    ["beat id that is empty", "video", ""],
+    ["beat id that is a bare current-directory reference", "video", "."],
   ])("rejects a %s", (_label, videoId, beatId) => {
-    expect(() => publicAudioPath(videoId, beatId, "x.wav")).toThrow(/path separator|parent/);
+    expect(() => publicAudioPath(videoId, beatId, "x.wav")).toThrow(
+      /path separator|parent|must be a non-empty name/
+    );
   });
 
   it("allows '..' as a substring, since without a separator it is just a name", () => {

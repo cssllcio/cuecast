@@ -17,16 +17,21 @@ export function publicAudioPath(videoId: string, beatId: string, sourcePath: str
   return `audio/${videoId}/${beatId}${extname(sourcePath)}`;
 }
 
-// The separator check is the load-bearing one: without a separator, ".." can
-// never become its own path segment, so positional forms like "../x" or
-// "x/../y" are already rejected above and are deliberately not re-checked
-// here. Only a bare ".." remains reachable. A substring such as "a..b" is
-// allowed — it is a literal directory name, not a traversal.
+// The separator check is the load-bearing one for traversal: without a
+// separator, ".." can never become its own path segment, so positional
+// forms like "../x" or "x/../y" are already rejected and are deliberately
+// not re-checked. A substring such as "a..b" is allowed — it is a literal
+// directory name.
+//
+// The second check is about collisions, not traversal: "", "." and ".." are
+// the only segments that don't name a real directory. "" and "." normalize
+// away (`audio//x` and `audio/./x` both become `audio/x`), which silently
+// undoes the per-video namespacing this function exists to provide.
 function assertPathSafeId(id: string, label: string): void {
   if (id.includes("/") || id.includes("\\")) {
     throw new Error(`${label} "${id}" must not contain a path separator`);
   }
-  if (id === "..") {
-    throw new Error(`${label} "${id}" must not be a parent reference`);
+  if (id === "" || id === "." || id === "..") {
+    throw new Error(`${label} "${id}" must be a non-empty name, not "." or ".."`);
   }
 }
