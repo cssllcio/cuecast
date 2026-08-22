@@ -17,11 +17,16 @@ export function publicAudioPath(videoId: string, beatId: string, sourcePath: str
   return `audio/${videoId}/${beatId}${extname(sourcePath)}`;
 }
 
+// The separator check is the load-bearing one: without a separator, ".." can
+// never become its own path segment, so positional forms like "../x" or
+// "x/../y" are already rejected above and are deliberately not re-checked
+// here. Only a bare ".." remains reachable. A substring such as "a..b" is
+// allowed — it is a literal directory name, not a traversal.
 function assertPathSafeId(id: string, label: string): void {
   if (id.includes("/") || id.includes("\\")) {
     throw new Error(`${label} "${id}" must not contain a path separator`);
   }
-  if (id === ".." || id.startsWith("../") || id.endsWith("/..") || id.includes("/../")) {
-    throw new Error(`${label} "${id}" must not contain a parent reference`);
+  if (id === "..") {
+    throw new Error(`${label} "${id}" must not be a parent reference`);
   }
 }

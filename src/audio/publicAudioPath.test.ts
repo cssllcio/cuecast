@@ -26,10 +26,15 @@ describe("publicAudioPath", () => {
   it.each([
     ["video id with a slash", "vid/eo", "beat_01"],
     ["video id with a backslash", "vid\\eo", "beat_01"],
-    ["video id with a parent reference", "..", "beat_01"],
+    ["video id that is a bare parent reference", "..", "beat_01"],
     ["beat id with a slash", "video", "be/at"],
-    ["beat id with a parent reference", "video", "../beat"],
+    ["beat id that is a bare parent reference", "video", ".."],
+    ["beat id with a parent reference segment", "video", "../beat"],
   ])("rejects a %s", (_label, videoId, beatId) => {
     expect(() => publicAudioPath(videoId, beatId, "x.wav")).toThrow(/path separator|parent/);
+  });
+
+  it("allows '..' as a substring, since without a separator it is just a name", () => {
+    expect(publicAudioPath("a..b", "beat_01", "x.wav")).toBe("audio/a..b/beat_01.wav");
   });
 });

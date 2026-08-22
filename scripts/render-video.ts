@@ -33,10 +33,9 @@ export async function renderVideo(
   // read arbitrary filesystem paths — audio has to be copied into public/
   // (Remotion's static-asset convention, matching how Root.tsx's SVG fixture
   // already resolves this same constraint) before bundle() runs, below.
-  mkdirSync("public/audio", { recursive: true });
-
   // Audio is namespaced under the video id (issue #4) so two videos that
-  // reuse a beat id can't clobber each other in public/audio/.
+  // reuse a beat id can't clobber each other; the helper creates the
+  // public/audio/<videoId>/ directory itself.
   function copyBeatAudioToPublic(beatId: string, sourcePath: string): string {
     const publicPath = publicAudioPath(videoScript.id, beatId, sourcePath);
     const destination = `public/${publicPath}`;
