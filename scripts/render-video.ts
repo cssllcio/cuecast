@@ -5,7 +5,8 @@ import { renderMedia, selectComposition } from "@remotion/renderer";
 import { renderMermaidToSvg } from "../src/mermaid/renderMermaidToSvg.js";
 import { NarrationClient } from "../src/narration/narrationClient.js";
 import { buildTimingTrack } from "../src/timing/timingExtractor.js";
-import { applyLexicon, mergeLexicons } from "../src/pronunciation/lexicon.js";
+import { mergeLexicons } from "../src/pronunciation/lexicon.js";
+import { spokenForBeat } from "../src/pronunciation/spokenForBeat.js";
 import { parseVideoScript, type VideoScript } from "../src/schema/videoScript.js";
 import { cuecastWebpackOverride } from "../src/remotion/webpackOverride.js";
 import { publicAudioPath } from "../src/audio/publicAudioPath.js";
@@ -57,7 +58,7 @@ export async function renderVideo(
 
   for (const beat of videoScript.script) {
     if (beat.type === "narration") {
-      const spoken = beat.spoken || applyLexicon(beat.text, lexicon);
+      const spoken = spokenForBeat(beat, lexicon);
       const { audioPath, durationSeconds } = await client.generate(spoken);
       durations.set(beat.id, durationSeconds);
       audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, audioPath));

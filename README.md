@@ -41,10 +41,19 @@ Three things are deliberate and worth knowing before you read the code:
   Evidence: [`spikes/narration-granularity/`](spikes/narration-granularity/README.md).
 - **Pronunciation is orthographic respelling**, because these engines have
   no phoneme tags. Every beat carries both `text` (for captions) and
-  `spoken` (what the TTS hears). A shared base lexicon lives here; each
-  consuming product keeps its own overrides, and a human listens before a
-  product's first real render — see
+  `spoken` (what the TTS hears), and every `spoken` string is run through
+  the lexicon on its way to the service — uniformly, not per beat by hand.
+  Hand-respelling does not hold as a substitute: the pattern it produces is
+  a script that respells its product name but still leaves `CLI` and `JSON`
+  raw, and the mispronunciation is only caught by ear, after the render.
+  `text` is never respelled, so captions keep reading "CLI" while the TTS
+  hears the letters. A shared base lexicon of cross-product terms lives
+  here; each consuming product keeps its own overrides in its `video.json`,
+  and a human listens before a product's first real render — see
   [`docs/fixture-test-procedure.md`](docs/fixture-test-procedure.md).
+  Changing an entry makes existing narration stale: `timing` comes from
+  generated audio, so a re-render is what makes a new respelling take
+  effect.
 
 ## Running it
 
