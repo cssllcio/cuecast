@@ -7,8 +7,12 @@ const narrationBeatSchema = z.object({
   spoken: z.string(),
   reveal: z.array(z.string()).optional(),
   // Authored escape hatch from a bad take. Absent means derived from the
-  // beat's identity — see src/narration/beatSeed.ts.
-  seed: z.number().int().nonnegative().optional(),
+  // beat's identity — see src/narration/beatSeed.ts. Upper-bounded to the
+  // same range beatSeed's derivation stays inside (< 2^31, the range known
+  // safe for Voicebox) so an out-of-range authored value — e.g. "seed": 1e21
+  // — fails locally at parse time instead of round-tripping to the service
+  // as a 422.
+  seed: z.number().int().nonnegative().max(2 ** 31 - 1).optional(),
 });
 
 const silenceBeatSchema = z.object({

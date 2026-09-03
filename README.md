@@ -20,7 +20,9 @@ those durations are written into the script's `timing` block; the renderer
 reads them as data. Edit the script, rebuild, reveals re-sync — and an
 unchanged script rebuilds to byte-identical narration, because every
 generation is seeded from the beat's identity. Write a `seed` on a beat to
-choose a different take.
+choose a different take. Reproducibility holds for a fixed engine and voice
+profile; changing either (`CUECAST_TTS_PROFILE_ID` is an environment
+variable) changes the audio at the same seed.
 
 | Stage | Tool |
 |---|---|

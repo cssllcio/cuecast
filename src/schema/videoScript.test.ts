@@ -110,6 +110,27 @@ describe("seed", () => {
     ).toThrow();
   });
 
+  // beatSeed's derivation never exceeds 2^31 - 1 (the range verified safe
+  // for Voicebox); an authored seed outside that range should fail locally
+  // at parse time rather than round-tripping to the service as a 422.
+  it("rejects an authored seed above 2^31 - 1", () => {
+    expect(() =>
+      parseVideoScript({
+        ...validScript,
+        script: [{ ...validScript.script[0], seed: 1e21 }],
+      })
+    ).toThrow();
+  });
+
+  it("accepts an authored seed at exactly the upper bound", () => {
+    expect(() =>
+      parseVideoScript({
+        ...validScript,
+        script: [{ ...validScript.script[0], seed: 2 ** 31 - 1 }],
+      })
+    ).not.toThrow();
+  });
+
   it("records a seed on a timing entry", () => {
     const parsed = parseVideoScript({
       ...validScript,
