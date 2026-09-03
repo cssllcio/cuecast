@@ -66,8 +66,10 @@ export function buildTimingTrack(
 
   // Second pass: a bed does not get to decide how long the video is. Only
   // bed entries can exceed the spine, since every other entry ends at the
-  // cursor. Spread rather than rebuild, so any field a caller already
-  // attached survives.
+  // cursor. Spread rather than rebuild: `entry` here is the source of truth
+  // for its own fields — decorateTimingTrack (which attaches audioPath and
+  // seed) always runs after this, on this function's own return value, so
+  // there is no separately-attached field to lose (design §2).
   const spineEndSeconds = cursorSeconds;
   return timing.map((entry) =>
     entry.endSeconds > spineEndSeconds
@@ -96,8 +98,10 @@ export function describeBedClamps(
   for (const beat of beats) {
     if (beat.type !== "bed") continue;
     const requestedSeconds = durations.get(beat.id) ?? 0;
-    const entry = timing.find((candidate) => candidate.beatId === beat.id);
-    if (entry === undefined) continue;
+    // buildTimingTrack emits exactly one entry per beat in `beats`, and
+    // `timing` is only ever that function's own output, so a bed beat's
+    // entry always exists here.
+    const entry = timing.find((candidate) => candidate.beatId === beat.id)!;
 
     const actualSeconds = entry.endSeconds - entry.startSeconds;
     // Float tolerance: these are sums of floating-point durations, so an
