@@ -26,8 +26,11 @@ const videoScript = parseVideoScript(proofFixture);
 const FPS = 30;
 
 const RootComponent: React.FC = () => {
-  const lastTiming = videoScript.timing.at(-1);
-  const durationInSeconds = lastTiming?.endSeconds ?? 5;
+  // Max over all entries, not the last one: bed entries float over the spine
+  // and can appear last in the array while ending earlier.
+  const durationInSeconds = videoScript.timing.length
+    ? Math.max(...videoScript.timing.map((entry) => entry.endSeconds))
+    : 5;
 
   return (
     <Composition<any, CuecastCompositionProps & Record<string, unknown>>

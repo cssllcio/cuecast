@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { NarrationBeat, ScriptBeat } from "../schema/videoScript.js";
-import { buildTimingTrack, decorateTimingTrack, extractBeatTiming } from "./timingExtractor.js";
+import {
+  buildTimingTrack,
+  decorateTimingTrack,
+  describeBedClamps,
+  extractBeatTiming,
+} from "./timingExtractor.js";
 
 const narrationBeat: NarrationBeat = {
   id: "beat_01",
@@ -18,7 +23,7 @@ describe("extractBeatTiming", () => {
 });
 
 describe("buildTimingTrack", () => {
-  it("lays out narration, silence, and bed beats sequentially from one durations map", () => {
+  it("lays out narration and silence sequentially, floating the bed beat over the spine", () => {
     const beats: ScriptBeat[] = [
       narrationBeat,
       { id: "beat_02", type: "silence", duration: 1.5 },
@@ -31,10 +36,14 @@ describe("buildTimingTrack", () => {
 
     const timing = buildTimingTrack(beats, durations);
 
+    // The spine (narration + silence) ends at 3.9s. The bed does not advance
+    // the cursor, so it starts at the spine position it sits in (3.9s) — and
+    // since nothing follows it, it is clamped down to that same 3.9s, giving
+    // it zero length rather than the 6.2s it requested.
     expect(timing).toEqual([
       { beatId: "beat_01", startSeconds: 0, endSeconds: 2.4 },
       { beatId: "beat_02", startSeconds: 2.4, endSeconds: 3.9 },
-      { beatId: "beat_03", startSeconds: 3.9, endSeconds: 10.1 },
+      { beatId: "beat_03", startSeconds: 3.9, endSeconds: 3.9 },
     ]);
   });
 
@@ -102,5 +111,96 @@ describe("decorateTimingTrack", () => {
     const decorated = decorateTimingTrack(timing, audioPaths, seeds);
 
     expect(decorated[0]).toMatchObject({ seed: 0 });
+  });
+});
+
+describe("bed beats as a parallel lane", () => {
+  const narration = (id: string): ScriptBeat => ({
+    id,
+    type: "narration",
+    text: "t",
+    spoken: "t",
+  });
+
+  it("does not let a bed advance the cursor", () => {
+    const beats: ScriptBeat[] = [
+      { id: "music", type: "bed", audio: "m.wav" },
+      narration("beat_01"),
+    ];
+    const durations = new Map([["music", 6], ["beat_01", 2]]);
+
+    const timing = buildTimingTrack(beats, durations);
+
+    // The narration starts at 0, not after the bed — that overlap is the
+    // whole point: a bed that occupied its own slot could never be ducked.
+    expect(timing).toEqual([
+      { beatId: "music", startSeconds: 0, endSeconds: 2 },
+      { beatId: "beat_01", startSeconds: 0, endSeconds: 2 },
+    ]);
+  });
+
+  it("clamps a bed that outlasts the spine", () => {
+    const beats: ScriptBeat[] = [
+      { id: "music", type: "bed", audio: "m.wav" },
+      narration("beat_01"),
+    ];
+    // 60s of music over a 2s spine.
+    const timing = buildTimingTrack(beats, new Map([["music", 60], ["beat_01", 2]]));
+
+    expect(timing[0]).toEqual({ beatId: "music", startSeconds: 0, endSeconds: 2 });
+  });
+
+  it("still lays narration and silence back to back", () => {
+    const beats: ScriptBeat[] = [
+      narration("beat_01"),
+      { id: "gap", type: "silence", duration: 1 },
+      narration("beat_02"),
+    ];
+    const timing = buildTimingTrack(
+      beats,
+      new Map([["beat_01", 2], ["beat_02", 3]])
+    );
+
+    expect(timing).toEqual([
+      { beatId: "beat_01", startSeconds: 0, endSeconds: 2 },
+      { beatId: "gap", startSeconds: 2, endSeconds: 3 },
+      { beatId: "beat_02", startSeconds: 3, endSeconds: 6 },
+    ]);
+  });
+
+  it("gives a bed placed after the last narration beat zero length", () => {
+    const beats: ScriptBeat[] = [
+      narration("beat_01"),
+      { id: "outro", type: "bed", audio: "m.wav" },
+    ];
+    const timing = buildTimingTrack(beats, new Map([["beat_01", 2], ["outro", 5]]));
+
+    expect(timing[1]).toEqual({ beatId: "outro", startSeconds: 2, endSeconds: 2 });
+  });
+});
+
+describe("describeBedClamps", () => {
+  it("reports a bed whose audio was cut short, with both durations", () => {
+    const beats: ScriptBeat[] = [
+      { id: "music", type: "bed", audio: "m.wav" },
+      { id: "beat_01", type: "narration", text: "t", spoken: "t" },
+    ];
+    const durations = new Map([["music", 60], ["beat_01", 2]]);
+    const timing = buildTimingTrack(beats, durations);
+
+    expect(describeBedClamps(beats, durations, timing)).toEqual([
+      { beatId: "music", requestedSeconds: 60, actualSeconds: 2 },
+    ]);
+  });
+
+  it("reports nothing when every bed fits", () => {
+    const beats: ScriptBeat[] = [
+      { id: "music", type: "bed", audio: "m.wav" },
+      { id: "beat_01", type: "narration", text: "t", spoken: "t" },
+    ];
+    const durations = new Map([["music", 2], ["beat_01", 5]]);
+    const timing = buildTimingTrack(beats, durations);
+
+    expect(describeBedClamps(beats, durations, timing)).toEqual([]);
   });
 });
