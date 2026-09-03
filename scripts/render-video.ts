@@ -4,6 +4,7 @@ import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { renderMermaidToSvg } from "../src/mermaid/renderMermaidToSvg.js";
 import { NarrationClient } from "../src/narration/narrationClient.js";
+import { beatSeed } from "../src/narration/beatSeed.js";
 import { buildTimingTrack } from "../src/timing/timingExtractor.js";
 import { mergeLexicons } from "../src/pronunciation/lexicon.js";
 import { spokenForBeat } from "../src/pronunciation/spokenForBeat.js";
@@ -59,7 +60,10 @@ export async function renderVideo(
   for (const beat of videoScript.script) {
     if (beat.type === "narration") {
       const spoken = spokenForBeat(beat, lexicon);
-      const { audioPath, durationSeconds } = await client.generate(spoken);
+      const { audioPath, durationSeconds } = await client.generate(
+        spoken,
+        beatSeed(videoScript.id, beat.id)
+      );
       durations.set(beat.id, durationSeconds);
       audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, audioPath));
     } else if (beat.type === "bed") {

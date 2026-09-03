@@ -64,8 +64,10 @@ describe("NarrationClient.generate", () => {
     rmSync(audioOutputDir, { recursive: true, force: true });
   });
 
-  it("posts text, profile and engine to /generate", async () => {
-    const fetchImpl = routedFetch([{ status: "completed", duration: 3.22, error: null }]);
+  it("posts text, profile, engine and seed to /generate", async () => {
+    const fetchImpl = routedFetch([
+      { status: "completed", duration: 3.22, error: null, seed: 4000 },
+    ]);
     const client = new NarrationClient({
       baseUrl: BASE,
       profileId: "test-profile",
@@ -75,21 +77,54 @@ describe("NarrationClient.generate", () => {
       sleepImpl,
     });
 
-    await client.generate("hello world");
+    await client.generate("hello world", 4000);
 
-    const generateCall = fetchImpl.mock.calls.find(([url]) => url === `${BASE}/generate`);
-    expect(generateCall).toBeDefined();
-    const [, init] = generateCall!;
-    expect(init).toEqual(
-      expect.objectContaining({
-        method: "POST",
-        headers: { "content-type": "application/json" },
-      })
-    );
+    const [, init] = fetchImpl.mock.calls[0];
     expect(JSON.parse(init.body as string)).toEqual({
       text: "hello world",
       profile_id: "test-profile",
       engine: "chatterbox",
+      seed: 4000,
+    });
+  });
+
+  // If the service ignored the seed, every render would look correct while
+  // reproducibility was quietly gone — the shape of issue #1, where the file
+  // existed and the audio did not. Verified live on 2026-09-02: Voicebox
+  // echoes the seed on both /generate and /history.
+  it("throws when the service reports a different seed than the one sent", async () => {
+    const fetchImpl = routedFetch([
+      { status: "completed", duration: 3.22, error: null, seed: 9999 },
+    ]);
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
+    });
+
+    await expect(client.generate("hello world", 4000)).rejects.toThrow(
+      /seed/i
+    );
+  });
+
+  it("accepts a completed generation that reports no seed at all", async () => {
+    // Absent is not the same as wrong: an older service build may omit the
+    // field. Only a contradiction is an error.
+    const fetchImpl = routedFetch([
+      { status: "completed", duration: 3.22, error: null },
+    ]);
+    const client = new NarrationClient({
+      baseUrl: BASE,
+      profileId: "test-profile",
+      audioOutputDir,
+      fetchImpl,
+      sleepImpl,
+    });
+
+    await expect(client.generate("hello world", 4000)).resolves.toMatchObject({
+      durationSeconds: 3.22,
     });
   });
 
@@ -103,7 +138,7 @@ describe("NarrationClient.generate", () => {
       sleepImpl,
     });
 
-    await client.generate("hi");
+    await client.generate("hi", 4000);
 
     const [, init] = fetchImpl.mock.calls.find(([url]) => url === `${BASE}/generate`)!;
     expect(JSON.parse(init.body as string).engine).toBe("chatterbox");
@@ -124,7 +159,7 @@ describe("NarrationClient.generate", () => {
       pollIntervalMs: 1000,
     });
 
-    const result = await client.generate("hello world");
+    const result = await client.generate("hello world", 4000);
 
     expect(result.durationSeconds).toBe(3.22);
     expect(result.audioPath).toBe(join(audioOutputDir, "gen-123.wav"));
@@ -153,7 +188,7 @@ describe("NarrationClient.generate", () => {
       sleepImpl,
     });
 
-    await expect(client.generate("hello")).rejects.toThrow(
+    await expect(client.generate("hello", 4000)).rejects.toThrow(
       /gen-123.*Server was shut down during generation/
     );
     expect(existsSync(join(audioOutputDir, "gen-123.wav"))).toBe(false);
@@ -172,7 +207,7 @@ describe("NarrationClient.generate", () => {
       sleepImpl,
     });
 
-    await expect(client.generate("hello")).rejects.toThrow(/gen-123.*completed.*no duration/);
+    await expect(client.generate("hello", 4000)).rejects.toThrow(/gen-123.*completed.*no duration/);
     expect(existsSync(join(audioOutputDir, "gen-123.wav"))).toBe(false);
   });
 
@@ -192,7 +227,7 @@ describe("NarrationClient.generate", () => {
       sleepImpl,
     });
 
-    const result = await client.generate("hello");
+    const result = await client.generate("hello", 4000);
 
     expect(result.durationSeconds).toBe(1.5);
     expect(sleepImpl).toHaveBeenCalledTimes(1);
@@ -216,7 +251,7 @@ describe("NarrationClient.generate", () => {
       timeoutMs: 12_000,
     });
 
-    await expect(client.generate("hello")).rejects.toThrow(/timed out.*12000.*loading_model/);
+    await expect(client.generate("hello", 4000)).rejects.toThrow(/timed out.*12000.*loading_model/);
     const historyCalls = fetchImpl.mock.calls.filter(
       ([url]) => url === `${BASE}/history/gen-123`
     );
@@ -233,7 +268,7 @@ describe("NarrationClient.generate", () => {
       sleepImpl,
     });
 
-    await expect(client.generate("hello")).rejects.toThrow(/\/generate.*500/);
+    await expect(client.generate("hello", 4000)).rejects.toThrow(/\/generate.*500/);
   });
 
   it("throws when export-audio responds with a non-ok status", async () => {
@@ -248,6 +283,6 @@ describe("NarrationClient.generate", () => {
       sleepImpl,
     });
 
-    await expect(client.generate("hello")).rejects.toThrow(/export-audio.*404/);
+    await expect(client.generate("hello", 4000)).rejects.toThrow(/export-audio.*404/);
   });
 });

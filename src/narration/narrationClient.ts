@@ -40,6 +40,7 @@ interface HistoryResponse {
   status: string;
   duration: number | null;
   error: string | null;
+  seed?: number | null;
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -67,14 +68,14 @@ export class NarrationClient {
     this.now = config.now ?? Date.now;
   }
 
-  async generate(spokenText: string): Promise<GenerateResult> {
-    const id = await this.startGeneration(spokenText);
-    const durationSeconds = await this.waitForCompletion(id);
+  async generate(spokenText: string, seed: number): Promise<GenerateResult> {
+    const id = await this.startGeneration(spokenText, seed);
+    const durationSeconds = await this.waitForCompletion(id, seed);
     const audioPath = await this.fetchAudio(id);
     return { audioPath, durationSeconds };
   }
 
-  private async startGeneration(spokenText: string): Promise<string> {
+  private async startGeneration(spokenText: string, seed: number): Promise<string> {
     const response = await this.fetchImpl(`${this.baseUrl}/generate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -82,6 +83,7 @@ export class NarrationClient {
         text: spokenText,
         profile_id: this.profileId,
         engine: this.engine,
+        seed,
       }),
     });
     if (!response.ok) {
@@ -91,7 +93,7 @@ export class NarrationClient {
     return body.id;
   }
 
-  private async waitForCompletion(id: string): Promise<number> {
+  private async waitForCompletion(id: string, seed: number): Promise<number> {
     const startedAt = this.now();
     let lastStatus = "unknown";
     for (;;) {
@@ -118,6 +120,14 @@ export class NarrationClient {
         // failure that shipped in issue #1 and the PR #3 inputProps bug.
         if (body.duration === null || body.duration === undefined) {
           throw new Error(`narration generation ${id} completed with no duration reported`);
+        }
+        // A seed the service silently ignored would leave every render looking
+        // fine while reproducibility was gone. Absent is tolerated (an older
+        // build may not report it); contradicting the request is not.
+        if (body.seed !== null && body.seed !== undefined && body.seed !== seed) {
+          throw new Error(
+            `narration generation ${id} used seed ${body.seed}, not the requested ${seed}`
+          );
         }
         return body.duration;
       }

@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { NarrationClient } from "../src/narration/narrationClient.js";
+import { beatSeed } from "../src/narration/beatSeed.js";
 import baseLexicon from "../lexicon/base.json" with { type: "json" };
 
 const baseUrl = process.env.CUECAST_TTS_URL;
@@ -21,7 +22,7 @@ const client = new NarrationClient({ baseUrl, profileId, audioOutputDir: outputD
 const results: Array<{ term: string; respelling: string; audioPath: string }> = [];
 
 for (const [term, respelling] of Object.entries(baseLexicon)) {
-  const { audioPath } = await client.generate(respelling);
+  const { audioPath } = await client.generate(respelling, beatSeed("fixture-test", term));
   results.push({ term, respelling, audioPath });
   console.log(`generated: ${term} -> "${respelling}" -> ${audioPath}`);
 }
