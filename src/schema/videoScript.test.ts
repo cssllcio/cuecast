@@ -66,3 +66,57 @@ describe("parseVideoScript", () => {
     expect(parsed.timing[0].audioPath).toBeUndefined();
   });
 });
+
+describe("seed", () => {
+  it("accepts a narration beat with an explicit seed", () => {
+    const parsed = parseVideoScript({
+      ...validScript,
+      script: [{ ...validScript.script[0], seed: 4000 }],
+    });
+    expect(parsed.script[0]).toMatchObject({ seed: 4000 });
+  });
+
+  it("accepts a narration beat with no seed", () => {
+    const parsed = parseVideoScript(validScript);
+    expect(parsed.script[0]).not.toHaveProperty("seed");
+  });
+
+  it("accepts zero", () => {
+    expect(() =>
+      parseVideoScript({
+        ...validScript,
+        script: [{ ...validScript.script[0], seed: 0 }],
+      })
+    ).not.toThrow();
+  });
+
+  // Voicebox answers a negative seed with HTTP 422, so rejecting it at parse
+  // time turns a wasted round trip into an immediate, local error.
+  it("rejects a negative seed", () => {
+    expect(() =>
+      parseVideoScript({
+        ...validScript,
+        script: [{ ...validScript.script[0], seed: -1 }],
+      })
+    ).toThrow();
+  });
+
+  it("rejects a fractional seed", () => {
+    expect(() =>
+      parseVideoScript({
+        ...validScript,
+        script: [{ ...validScript.script[0], seed: 1.5 }],
+      })
+    ).toThrow();
+  });
+
+  it("records a seed on a timing entry", () => {
+    const parsed = parseVideoScript({
+      ...validScript,
+      timing: [
+        { beatId: "beat_01", startSeconds: 0, endSeconds: 2.4, seed: 4000 },
+      ],
+    });
+    expect(parsed.timing[0]).toMatchObject({ seed: 4000 });
+  });
+});

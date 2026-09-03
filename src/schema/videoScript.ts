@@ -6,6 +6,9 @@ const narrationBeatSchema = z.object({
   text: z.string(),
   spoken: z.string(),
   reveal: z.array(z.string()).optional(),
+  // Authored escape hatch from a bad take. Absent means derived from the
+  // beat's identity — see src/narration/beatSeed.ts.
+  seed: z.number().int().nonnegative().optional(),
 });
 
 const silenceBeatSchema = z.object({
@@ -32,6 +35,10 @@ const timingEntrySchema = z.object({
   startSeconds: z.number().nonnegative(),
   endSeconds: z.number().nonnegative(),
   audioPath: z.string().optional(),
+  // Generated, never authored: the seed this beat's audio was actually made
+  // with, so a past render is explicable without re-deriving anything.
+  // Narration-only, like audioPath — silence and bed beats never reach the TTS.
+  seed: z.number().int().nonnegative().optional(),
 });
 
 const videoScriptSchema = z.object({
