@@ -56,3 +56,26 @@ export function buildTimingTrack(
 
   return timing;
 }
+
+// Attaches each entry's real audio path and the seed that produced it
+// (design §4), so a rendered artifact is self-describing without
+// re-deriving anything. Pulled out of scripts/render-video.ts (untested —
+// `npm test` is `vitest run src`, so `scripts/` is not covered) specifically
+// to prove a `bed`/`silence` beat — absent from both maps — comes out with
+// NO `seed` key at all, not `seed: undefined`, which JSON.stringify would
+// still serialize into the generated artifact.
+export function decorateTimingTrack(
+  timing: TimingEntry[],
+  audioPaths: Map<string, string>,
+  seeds: Map<string, number>
+): TimingEntry[] {
+  return timing.map((entry) => {
+    const audioPath = audioPaths.get(entry.beatId);
+    const seed = seeds.get(entry.beatId);
+    return {
+      ...entry,
+      ...(audioPath ? { audioPath } : {}),
+      ...(seed !== undefined ? { seed } : {}),
+    };
+  });
+}

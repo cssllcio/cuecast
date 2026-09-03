@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { beatSeed } from "./beatSeed.js";
+import type { NarrationBeat } from "../schema/videoScript.js";
+import { beatSeed, resolveBeatSeed } from "./beatSeed.js";
+
+const narrationBeat: NarrationBeat = {
+  id: "beat_01",
+  type: "narration",
+  text: "The API talks to the database.",
+  spoken: "The A P I talks to the database.",
+};
 
 describe("beatSeed", () => {
   // These values are a compatibility surface, not an implementation detail.
@@ -48,5 +56,26 @@ describe("beatSeed", () => {
       expect(seed).toBeGreaterThanOrEqual(0);
       expect(seed).toBeLessThan(2 ** 31);
     }
+  });
+});
+
+describe("resolveBeatSeed", () => {
+  it("falls back to the derived identity seed when the beat has no authored seed", () => {
+    expect(resolveBeatSeed(narrationBeat, "example_video")).toBe(
+      beatSeed("example_video", "beat_01")
+    );
+  });
+
+  it("uses the authored seed when present", () => {
+    expect(resolveBeatSeed({ ...narrationBeat, seed: 4000 }, "example_video")).toBe(4000);
+  });
+
+  // `beat.seed ?? beatSeed(...)` and `beat.seed || beatSeed(...)` type-check
+  // identically and pass every other test, but `||` silently discards an
+  // authored seed of exactly 0 and substitutes the derived one instead — the
+  // same bug shape as the dead-lexicon `beat.spoken || applyLexicon(...)` bug
+  // (design §5). This is the test that would catch a `??` -> `||` regression.
+  it("keeps an authored seed of 0 rather than falling back to the derived seed", () => {
+    expect(resolveBeatSeed({ ...narrationBeat, seed: 0 }, "example_video")).toBe(0);
   });
 });
