@@ -56,15 +56,15 @@ export async function renderVideo(
   });
   const durations = new Map<string, number>();
   const audioPaths = new Map<string, string>();
+  const seeds = new Map<string, number>();
 
   for (const beat of videoScript.script) {
     if (beat.type === "narration") {
       const spoken = spokenForBeat(beat, lexicon);
-      const { audioPath, durationSeconds } = await client.generate(
-        spoken,
-        beatSeed(videoScript.id, beat.id)
-      );
+      const seed = beat.seed ?? beatSeed(videoScript.id, beat.id);
+      const { audioPath, durationSeconds } = await client.generate(spoken, seed);
       durations.set(beat.id, durationSeconds);
+      seeds.set(beat.id, seed);
       audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, audioPath));
     } else if (beat.type === "bed") {
       durations.set(beat.id, await probeAudioDurationSeconds(beat.audio));
@@ -75,7 +75,12 @@ export async function renderVideo(
   const timing = buildTimingTrack(videoScript.script, durations).map(
     (entry) => {
       const audioPath = audioPaths.get(entry.beatId);
-      return audioPath ? { ...entry, audioPath } : entry;
+      const seed = seeds.get(entry.beatId);
+      return {
+        ...entry,
+        ...(audioPath ? { audioPath } : {}),
+        ...(seed !== undefined ? { seed } : {}),
+      };
     }
   );
   const finalVideoScript: VideoScript = { ...videoScript, timing };

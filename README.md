@@ -17,7 +17,10 @@ Conventional explainer-video order is: animate, then cut narration to fit,
 so every script edit is expensive. cuecast inverts it. Narration is
 generated first; each clip's real duration comes back from the TTS service;
 those durations are written into the script's `timing` block; the renderer
-reads them as data. Edit the script, rebuild, reveals re-sync.
+reads them as data. Edit the script, rebuild, reveals re-sync — and an
+unchanged script rebuilds to byte-identical narration, because every
+generation is seeded from the beat's identity. Write a `seed` on a beat to
+choose a different take.
 
 | Stage | Tool |
 |---|---|
