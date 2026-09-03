@@ -18,6 +18,7 @@ It runs from any directory. The `video.json` path and `--out` resolve against
 wherever you invoke it, a script's `diagram.source` and a bed beat's `audio`
 resolve against the script file, and every intermediate goes to
 `.cuecast/<video id>/` beside you — never inside the package.
+
 The issue tracker is empty.
 
 ## How it works

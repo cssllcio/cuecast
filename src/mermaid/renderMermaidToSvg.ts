@@ -52,10 +52,28 @@ const POLL_INTERVAL_MS = 50;
 // The package only exports its "." subpath (see its package.json), not
 // "./src/cli.js" — resolving "." and deriving the sibling cli.js from its
 // directory stays within what the package actually publishes as resolvable.
-const mmdcCliPath = join(
-  dirname(require.resolve("@mermaid-js/mermaid-cli")),
-  "cli.js"
-);
+//
+// Resolved lazily (on first render) rather than at module load, so an
+// installed-without-its-dependency situation surfaces as an actionable
+// cuecast error from the code path that needs it, not as a raw Node
+// MODULE_NOT_FOUND stack the moment anything imports this file.
+let cachedMmdcCliPath: string | undefined;
+function resolveMmdcCliPath(): string {
+  if (cachedMmdcCliPath !== undefined) return cachedMmdcCliPath;
+  try {
+    cachedMmdcCliPath = join(
+      dirname(require.resolve("@mermaid-js/mermaid-cli")),
+      "cli.js"
+    );
+    return cachedMmdcCliPath;
+  } catch (error) {
+    throw new Error(
+      "cuecast: could not find @mermaid-js/mermaid-cli, which renderMermaidToSvg " +
+        "needs to render the diagram. Run `npm install` in the cuecast package.",
+      { cause: error }
+    );
+  }
+}
 
 const mmdcCommand: RendererCommand = ({
   inputPath,
@@ -64,7 +82,7 @@ const mmdcCommand: RendererCommand = ({
 }) => ({
   file: process.execPath,
   args: [
-    mmdcCliPath,
+    resolveMmdcCliPath(),
     "-i",
     inputPath,
     "-o",
