@@ -73,7 +73,7 @@ describe("the clamp-to-render seam", () => {
   // zero-length bed entry, another asserts buildAudioSequences builds specs,
   // and nothing fed the first's real output into the second. This test
   // closes that seam by running the real pipeline — buildTimingTrack, then
-  // decorateTimingTrack, exactly as scripts/render-video.ts does — and
+  // decorateTimingTrack, exactly as src/pipeline/renderVideo.ts does — and
   // asserting the result buildAudioSequences hands to Remotion never has
   // less than a full frame of audio.
   it("never hands buildAudioSequences a bed spec with less than a full frame", () => {

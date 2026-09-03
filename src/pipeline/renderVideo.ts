@@ -2,28 +2,35 @@ import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from
 import { dirname } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
-import { renderMermaidToSvg } from "../src/mermaid/renderMermaidToSvg.js";
-import { NarrationClient } from "../src/narration/narrationClient.js";
-import { resolveBeatSeed } from "../src/narration/beatSeed.js";
+import { renderMermaidToSvg } from "../mermaid/renderMermaidToSvg.js";
+import { NarrationClient } from "../narration/narrationClient.js";
+import { resolveBeatSeed } from "../narration/beatSeed.js";
 import {
   buildTimingTrack,
   decorateTimingTrack,
   describeBedClamps,
-} from "../src/timing/timingExtractor.js";
-import { mergeLexicons } from "../src/pronunciation/lexicon.js";
-import { spokenForBeat } from "../src/pronunciation/spokenForBeat.js";
-import { parseVideoScript, type VideoScript } from "../src/schema/videoScript.js";
-import { cuecastWebpackOverride } from "../src/remotion/webpackOverride.js";
-import { publicAudioPath } from "../src/audio/publicAudioPath.js";
-import { probeAudioDurationSeconds } from "../src/audio/probeAudioDuration.js";
-import { secondsToDurationFrames } from "../src/timing/frames.js";
-import { timelineDurationSeconds } from "../src/timing/timelineDuration.js";
-import baseLexicon from "../lexicon/base.json" with { type: "json" };
+} from "../timing/timingExtractor.js";
+import { mergeLexicons } from "../pronunciation/lexicon.js";
+import { spokenForBeat } from "../pronunciation/spokenForBeat.js";
+import { parseVideoScript, type VideoScript } from "../schema/videoScript.js";
+import { cuecastWebpackOverride } from "../remotion/webpackOverride.js";
+import { publicAudioPath } from "../audio/publicAudioPath.js";
+import { probeAudioDurationSeconds } from "../audio/probeAudioDuration.js";
+import { secondsToDurationFrames } from "../timing/frames.js";
+import { timelineDurationSeconds } from "../timing/timelineDuration.js";
+import baseLexicon from "../../lexicon/base.json" with { type: "json" };
 
-export async function renderVideo(
-  videoScriptPath: string,
-  outputPath: string
-): Promise<void> {
+export interface RenderVideoOptions {
+  /** Absolute path to the video.json. */
+  scriptPath: string;
+  /** Absolute path to write the rendered mp4 to. */
+  outPath: string;
+  /** Absolute directory for this run's intermediates. */
+  workDir: string;
+}
+
+export async function renderVideo(options: RenderVideoOptions): Promise<void> {
+  const { scriptPath, outPath, workDir } = options;
   const baseUrl = process.env.CUECAST_TTS_URL;
   const profileId = process.env.CUECAST_TTS_PROFILE_ID;
   if (!baseUrl || !profileId) {
@@ -32,7 +39,7 @@ export async function renderVideo(
     );
   }
 
-  const rawJson = JSON.parse(readFileSync(videoScriptPath, "utf-8"));
+  const rawJson = JSON.parse(readFileSync(scriptPath, "utf-8"));
   const videoScript: VideoScript = parseVideoScript(rawJson);
   const lexicon = mergeLexicons(baseLexicon, videoScript.pronunciations);
 
@@ -142,7 +149,7 @@ export async function renderVideo(
     },
     serveUrl: bundleLocation,
     codec: "h264",
-    outputLocation: outputPath,
+    outputLocation: outPath,
     inputProps,
   });
 }

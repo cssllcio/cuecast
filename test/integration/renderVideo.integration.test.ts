@@ -1,14 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
-import { renderVideo } from "../../scripts/render-video.js";
+import { renderVideo } from "../../src/pipeline/renderVideo.js";
 
 const baseUrl = process.env.CUECAST_TTS_URL;
 
 describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
   it("generates narration, lays out timing, and renders a video that actually carries the narration audio", async () => {
     const outputPath = "out/example-video.mp4";
-    await renderVideo("test/fixtures/example-video.json", outputPath);
+    await renderVideo({
+      scriptPath: resolve("test/fixtures/example-video.json"),
+      outPath: resolve(outputPath),
+      workDir: resolve(".cuecast/example_video"),
+    });
 
     expect(existsSync(outputPath)).toBe(true);
 
@@ -40,10 +45,18 @@ describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
         readFileSync("generated/current-render-video.json", "utf-8")
       ).timing;
 
-    await renderVideo("test/fixtures/example-video.json", "out/repro-a.mp4");
+    await renderVideo({
+      scriptPath: resolve("test/fixtures/example-video.json"),
+      outPath: resolve("out/repro-a.mp4"),
+      workDir: resolve(".cuecast/repro_a"),
+    });
     const first = readTiming();
 
-    await renderVideo("test/fixtures/example-video.json", "out/repro-b.mp4");
+    await renderVideo({
+      scriptPath: resolve("test/fixtures/example-video.json"),
+      outPath: resolve("out/repro-b.mp4"),
+      workDir: resolve(".cuecast/repro_b"),
+    });
     const second = readTiming();
 
     expect(second).toEqual(first);

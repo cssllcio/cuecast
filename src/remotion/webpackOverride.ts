@@ -1,6 +1,6 @@
 import type { WebpackOverrideFn } from "@remotion/bundler";
 
-// Shared by scripts/render-video.ts and test/render/composition.render.test.ts.
+// Shared by src/pipeline/renderVideo.ts and test/render/composition.render.test.ts.
 //
 // Remotion's default webpack config resolves an explicit ".js" import
 // literally (it only probes .ts/.tsx for extensionless imports), so it

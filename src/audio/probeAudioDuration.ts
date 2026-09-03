@@ -2,7 +2,7 @@ import { parseFile } from "music-metadata";
 
 // A bed beat's real duration comes from its audio asset, not from anything
 // authored in video.json — probed here, once, before buildTimingTrack lays
-// out the timeline (see scripts/render-video.ts).
+// out the timeline (see src/pipeline/renderVideo.ts).
 export async function probeAudioDurationSeconds(
   filePath: string
 ): Promise<number> {

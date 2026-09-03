@@ -14,7 +14,7 @@ describe("Cuecast composition audio muxing", () => {
     // Audio/Sequence -> renderMedia) end to end without needing a live TTS
     // service: a bed beat's audio is already a static file (test/fixtures/
     // tone.wav, a real 1s 440Hz WAV, not a mock), so this exercises exactly
-    // the copy-into-public/ + staticFile() path scripts/render-video.ts uses
+    // the copy-into-public/ + staticFile() path src/pipeline/renderVideo.ts uses
     // for narration audio too, just without the generate/transcribe calls.
     //
     // This also happens to be the first test in the project that renders a
@@ -22,9 +22,9 @@ describe("Cuecast composition audio muxing", () => {
     // is how it caught a real bug: renderMedia's own inputProps alone never
     // reached the component (it renders whatever selectComposition already
     // resolved), so inputProps must be passed to selectComposition too. See
-    // the matching comment in scripts/render-video.ts.
+    // the matching comment in src/pipeline/renderVideo.ts.
     // Build the public path with the real helper so this test exercises the
-    // same video-id namespacing scripts/render-video.ts uses (issue #4).
+    // same video-id namespacing src/pipeline/renderVideo.ts uses (issue #4).
     const bedPublicPath = publicAudioPath("audio_mux_proof", "beat_bed", "test/fixtures/tone.wav");
     mkdirSync(dirname(`public/${bedPublicPath}`), { recursive: true });
     copyFileSync("test/fixtures/tone.wav", `public/${bedPublicPath}`);

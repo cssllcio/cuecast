@@ -25,7 +25,7 @@ export interface AudioSequenceSpec {
 }
 
 // Every timing entry with an audioPath (narration audio, or a bed beat's
-// supplied clip — see scripts/render-video.ts) gets its own Sequence, keyed
+// supplied clip — see src/pipeline/renderVideo.ts) gets its own Sequence, keyed
 // to when that beat starts on the real timeline. durationInFrames bounds the
 // Sequence to that beat's own timing span: a beat's timeline duration comes
 // from the TTS service's reported duration for narration, or the probed file

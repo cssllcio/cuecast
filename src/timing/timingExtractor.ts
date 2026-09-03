@@ -116,11 +116,11 @@ export function describeBedClamps(
 
 // Attaches each entry's real audio path and the seed that produced it
 // (design §4), so a rendered artifact is self-describing without
-// re-deriving anything. Pulled out of scripts/render-video.ts (untested —
-// `npm test` is `vitest run src`, so `scripts/` is not covered) specifically
-// to prove a `bed`/`silence` beat — absent from both maps — comes out with
-// NO `seed` key at all, not `seed: undefined`, which JSON.stringify would
-// still serialize into the generated artifact.
+// re-deriving anything. Extracted out of src/pipeline/renderVideo.ts to be
+// unit-testable on its own, specifically to prove a `bed`/`silence` beat —
+// absent from both maps — comes out with NO `seed` key at all, not
+// `seed: undefined`, which JSON.stringify would still serialize into the
+// generated artifact.
 export function decorateTimingTrack(
   timing: TimingEntry[],
   audioPaths: Map<string, string>,

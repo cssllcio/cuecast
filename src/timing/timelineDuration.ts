@@ -9,7 +9,7 @@ export const DEFAULT_DURATION_SECONDS = 5;
 // entry in array order (design §2): bed entries float over the narration/
 // silence spine and can end at or before the spine's end while still being
 // last in the script's array order. Both Root.tsx (Composition defaultProps)
-// and scripts/render-video.ts (the real render) need this, and both used to
+// and src/pipeline/renderVideo.ts (the real render) need this, and both used to
 // read `timing.at(-1)` or guard only on `timing.length`, which passes an
 // all-bed script straight through to a zero-length composition — every bed
 // in a bed-only script clamps to {start: 0, end: 0} against an empty spine.
