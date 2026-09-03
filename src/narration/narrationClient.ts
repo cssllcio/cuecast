@@ -122,9 +122,20 @@ export class NarrationClient {
           throw new Error(`narration generation ${id} completed with no duration reported`);
         }
         // A seed the service silently ignored would leave every render looking
-        // fine while reproducibility was gone. Absent is tolerated (an older
-        // build may not report it); contradicting the request is not.
-        if (body.seed !== null && body.seed !== undefined && body.seed !== seed) {
+        // fine while reproducibility was gone — the exact failure this field
+        // exists to catch (design §5). A build that doesn't understand `seed`
+        // is not hypothetical: Pydantic drops unknown request fields by
+        // default, so a Voicebox predating seed support accepts the POST,
+        // generates unseeded audio, and reports no seed back — indistinguishable
+        // from "ignored" without this check. Absence is therefore an error, the
+        // same as a mismatch; only distinguished so the message says which.
+        if (body.seed === null || body.seed === undefined) {
+          throw new Error(
+            `narration generation ${id} completed but reported no seed at all (requested ${seed}); ` +
+              `the service may not support seeding`
+          );
+        }
+        if (body.seed !== seed) {
           throw new Error(
             `narration generation ${id} used seed ${body.seed}, not the requested ${seed}`
           );

@@ -79,7 +79,9 @@ describe("NarrationClient.generate", () => {
 
     await client.generate("hello world", 4000);
 
-    const [, init] = fetchImpl.mock.calls[0];
+    const [, init] = fetchImpl.mock.calls.find(([url]) => url === `${BASE}/generate`)!;
+    expect(init.method).toBe("POST");
+    expect(init.headers).toMatchObject({ "content-type": "application/json" });
     expect(JSON.parse(init.body as string)).toEqual({
       text: "hello world",
       profile_id: "test-profile",
@@ -109,9 +111,13 @@ describe("NarrationClient.generate", () => {
     );
   });
 
-  it("accepts a completed generation that reports no seed at all", async () => {
-    // Absent is not the same as wrong: an older service build may omit the
-    // field. Only a contradiction is an error.
+  it("throws when a completed generation reports no seed at all", async () => {
+    // Absence is not proof of ignorance in general, but here it is: Pydantic
+    // (Voicebox's request layer) drops unknown fields silently, so a build
+    // predating seed support would accept the seeded POST, generate unseeded
+    // audio, and report no seed back. That is indistinguishable from a
+    // service that understood the field and ignored it — the exact failure
+    // §5 exists to catch — so absence must fail closed, not be tolerated.
     const fetchImpl = routedFetch([
       { status: "completed", duration: 3.22, error: null },
     ]);
@@ -123,13 +129,13 @@ describe("NarrationClient.generate", () => {
       sleepImpl,
     });
 
-    await expect(client.generate("hello world", 4000)).resolves.toMatchObject({
-      durationSeconds: 3.22,
-    });
+    await expect(client.generate("hello world", 4000)).rejects.toThrow(
+      /no seed/i
+    );
   });
 
   it("defaults the engine to chatterbox when none is configured", async () => {
-    const fetchImpl = routedFetch([{ status: "completed", duration: 1, error: null }]);
+    const fetchImpl = routedFetch([{ status: "completed", duration: 1, error: null, seed: 4000 }]);
     const client = new NarrationClient({
       baseUrl: BASE,
       profileId: "test-profile",
@@ -148,7 +154,7 @@ describe("NarrationClient.generate", () => {
     const fetchImpl = routedFetch([
       { status: "loading_model", duration: 0, error: null },
       { status: "generating", duration: 0, error: null },
-      { status: "completed", duration: 3.22, error: null },
+      { status: "completed", duration: 3.22, error: null, seed: 4000 },
     ]);
     const client = new NarrationClient({
       baseUrl: BASE,
@@ -217,7 +223,7 @@ describe("NarrationClient.generate", () => {
     // can't be mistaken for success or failure.
     const fetchImpl = routedFetch([
       { status: "queued", duration: 0, error: null },
-      { status: "completed", duration: 1.5, error: null },
+      { status: "completed", duration: 1.5, error: null, seed: 4000 },
     ]);
     const client = new NarrationClient({
       baseUrl: BASE,
@@ -272,7 +278,7 @@ describe("NarrationClient.generate", () => {
   });
 
   it("throws when export-audio responds with a non-ok status", async () => {
-    const fetchImpl = routedFetch([{ status: "completed", duration: 1, error: null }], {
+    const fetchImpl = routedFetch([{ status: "completed", duration: 1, error: null, seed: 4000 }], {
       exportStatus: 404,
     });
     const client = new NarrationClient({
