@@ -1,8 +1,15 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import { renderVideo } from "../../src/pipeline/renderVideo.js";
+import { packageRoot } from "../../src/paths.js";
 
 const baseUrl = process.env.CUECAST_TTS_URL;
 
@@ -63,5 +70,33 @@ describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
     // Guard against the test passing vacuously if timing were ever empty.
     expect(first.length).toBeGreaterThan(0);
     expect(first.some((entry: { seed?: number }) => entry.seed !== undefined)).toBe(true);
+  }, 600_000);
+
+  // Exercises what actually ships. Testing renderVideo() directly would leave
+  // the compiled bin — the only thing a consuming product runs — unverified.
+  it("renders through the built binary, from a directory outside the repo", async () => {
+    await execa("npm", ["run", "build"], { cwd: packageRoot() });
+
+    const cwd = mkdtempSync(join(tmpdir(), "cuecast-cli-"));
+    const outPath = join(cwd, "cli-render.mp4");
+
+    await execa(
+      "node",
+      [
+        join(packageRoot(), "dist/cli/cuecast.js"),
+        "build",
+        join(packageRoot(), "test/fixtures/example-video.json"),
+        "--out",
+        outPath,
+      ],
+      { cwd, env: process.env }
+    );
+
+    expect(existsSync(outPath)).toBe(true);
+    // The work dir belongs to the caller's directory, not the package.
+    expect(existsSync(join(cwd, ".cuecast", "example_video"))).toBe(true);
+    expect(existsSync(join(packageRoot(), "generated"))).toBe(false);
+
+    rmSync(cwd, { recursive: true, force: true });
   }, 600_000);
 }, 600_000);

@@ -7,8 +7,17 @@ element appears exactly when the narration introduces it.
 
 **Status:** the foundations are built, reviewed, and verified end to end
 against a real TTS service. One example video renders with generated
-narration audio, reveals timed to it, and no manual steps. There is no CLI
-yet; the entry point is `renderVideo()` in [`scripts/render-video.ts`](scripts/render-video.ts).
+narration audio, reveals timed to it, and no manual steps. The entry point is the `cuecast` CLI:
+
+```bash
+npm run build
+node dist/cli/cuecast.js build video.json --out out.mp4
+```
+
+It runs from any directory. The `video.json` path and `--out` resolve against
+wherever you invoke it, a script's `diagram.source` and a bed beat's `audio`
+resolve against the script file, and every intermediate goes to
+`.cuecast/<video id>/` beside you — never inside the package.
 The issue tracker is empty.
 
 ## How it works
@@ -95,7 +104,9 @@ src/timing/        sequential timeline from durations; frame conversions
 src/pronunciation/ lexicon merge + respelling
 src/audio/         public/ path namespacing, duration probing
 src/remotion/      the Cuecast composition and its Root
-scripts/           render-video.ts (the pipeline), fixture-test.ts (listen test)
+src/cli/           the cuecast binary and its arg parsing
+src/pipeline/      renderVideo — the orchestration
+scripts/           fixture-test.ts (listen test)
 lexicon/           shared base lexicon (cross-product terms only)
 spikes/            the two investigations the design depended on
 docs/              spec, plan, procedures

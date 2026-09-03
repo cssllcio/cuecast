@@ -1,7 +1,10 @@
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import { execa } from "execa";
+
+const require = createRequire(import.meta.url);
 
 export interface RenderMermaidOptions {
   inputPath: string;
@@ -37,14 +40,31 @@ export type RendererCommand = (context: RendererCommandContext) => {
 const DEFAULT_TIMEOUT_MS = 120_000;
 const POLL_INTERVAL_MS = 50;
 
+// Resolved via Node's own module resolution from this file's location, not
+// spawned via `npx`. `npx mmdc` resolves against the CALLER's cwd: outside
+// this repo that finds no local install and falls through to whatever `mmdc`
+// happens to be on PATH (a different mermaid-cli, with its own puppeteer
+// cache that may not have chrome-headless-shell installed) — or nothing at
+// all. `require.resolve` instead walks up from this module's own location,
+// which finds the dependency correctly whether npm nested it under this
+// package or hoisted it to a consumer's top-level node_modules.
+//
+// The package only exports its "." subpath (see its package.json), not
+// "./src/cli.js" — resolving "." and deriving the sibling cli.js from its
+// directory stays within what the package actually publishes as resolvable.
+const mmdcCliPath = join(
+  dirname(require.resolve("@mermaid-js/mermaid-cli")),
+  "cli.js"
+);
+
 const mmdcCommand: RendererCommand = ({
   inputPath,
   svgPath,
   puppeteerConfigPath,
 }) => ({
-  file: "npx",
+  file: process.execPath,
   args: [
-    "mmdc",
+    mmdcCliPath,
     "-i",
     inputPath,
     "-o",
