@@ -13,8 +13,12 @@ not transfer between engines (spec §5).
    repeating one seed produces byte-identical audio and proves nothing. Different
    seeds produce genuinely different takes — the same sentence has measured 1.52s
    on one seed and 4.22s on another — and a single take can be pathological. One
-   unseeded take of `sett` came back at 6.64 seconds for one word on 2026-09-02,
+   *unseeded* take of `sett` came back at 6.64 seconds for one word on 2026-09-02,
    which would have condemned a good respelling had anyone judged it on that alone.
+   (Raw measurements: `docs/superpowers/specs/2026-09-02-cuecast-narration-seed-design.md`
+   §1 for the unseeded `sett` takes, §2 for the seeded md5/duration/byte-count
+   table. A fixture-test run's own takes are all seeded, so they won't reproduce
+   that unseeded outlier — that's seeding working, not a contradiction.)
    Fixed seeds mean two people running this procedure hear the same audio.
 3. For each term that sounds wrong, update the respelling in `lexicon/base.json`
    (or the consuming product's own override file, if the term is
