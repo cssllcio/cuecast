@@ -6,6 +6,7 @@ import {
 } from "./CuecastComposition.js";
 import { parseVideoScript } from "../schema/videoScript.js";
 import { secondsToDurationFrames } from "../timing/frames.js";
+import { timelineDurationSeconds } from "../timing/timelineDuration.js";
 import proofFixture from "../../test/fixtures/render-proof-video.json" with { type: "json" };
 // A durable, checked-in fixture (see test/fixtures/render-proof-video.svg) —
 // generated once from generic-container.mmd via renderMermaidToSvg and
@@ -26,8 +27,9 @@ const videoScript = parseVideoScript(proofFixture);
 const FPS = 30;
 
 const RootComponent: React.FC = () => {
-  const lastTiming = videoScript.timing.at(-1);
-  const durationInSeconds = lastTiming?.endSeconds ?? 5;
+  // See src/timing/timelineDuration.ts: max over all entries, not the last
+  // one, and a positive fallback for an empty or all-bed timing track.
+  const durationInSeconds = timelineDurationSeconds(videoScript.timing);
 
   return (
     <Composition<any, CuecastCompositionProps & Record<string, unknown>>

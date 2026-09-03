@@ -9,6 +9,7 @@ import {
 } from "remotion";
 import type { VideoScript } from "../schema/videoScript.js";
 import { secondsToFrame } from "../timing/frames.js";
+import { buildDuckEnvelope } from "../audio/duckEnvelope.js";
 
 export interface CuecastCompositionProps {
   videoScript: VideoScript;
@@ -16,33 +17,70 @@ export interface CuecastCompositionProps {
 }
 
 export interface AudioSequenceSpec {
+  beatId: string;
   audioPath: string;
   fromFrame: number;
   durationInFrames: number;
+  volume: number | ((frame: number) => number);
 }
 
 // Every timing entry with an audioPath (narration audio, or a bed beat's
 // supplied clip — see scripts/render-video.ts) gets its own Sequence, keyed
-// to when that beat starts on the real timeline. durationInFrames bounds
-// the Sequence to that beat's own timing span: a beat's timeline duration
-// comes from Whisper's transcribed segment boundaries, not the generated
-// audio file's own (possibly padded) length, so leaving the Sequence
-// unbounded would let one beat's audio bleed into the next beat's window.
-// A pure function so this mapping is unit-testable without rendering the
-// composition.
+// to when that beat starts on the real timeline. durationInFrames bounds the
+// Sequence to that beat's own timing span: a beat's timeline duration comes
+// from the TTS service's reported duration for narration, or the probed file
+// length for a bed — not from the audio file's own possibly-padded length —
+// so leaving the Sequence unbounded would let one beat's audio bleed into
+// the next beat's window.
+//
+// A bed beat that ducks gets a volume function instead of a constant; every
+// other sequence plays at full gain. Pure, so the whole mapping is testable
+// without rendering the composition.
 export function buildAudioSequences(
   videoScript: VideoScript,
   fps: number
 ): AudioSequenceSpec[] {
   return videoScript.timing
     .filter((entry) => Boolean(entry.audioPath))
-    .map((entry) => ({
-      audioPath: entry.audioPath as string,
-      // A position and a span on the timeline: nearest frame, not ceil —
-      // see src/timing/frames.ts for why the two conversions differ.
-      fromFrame: secondsToFrame(entry.startSeconds, fps),
-      durationInFrames: secondsToFrame(entry.endSeconds - entry.startSeconds, fps),
-    }));
+    .map((entry) => {
+      const beat = videoScript.script.find((candidate) => candidate.id === entry.beatId);
+
+      let volume: number | ((frame: number) => number) = 1;
+      if (
+        beat?.type === "bed" &&
+        beat.duck !== undefined &&
+        beat.duck.length > 0 &&
+        beat.duckTo !== undefined
+      ) {
+        const duckSpans = beat.duck
+          .map((targetId) => videoScript.timing.find((t) => t.beatId === targetId))
+          .filter((span): span is NonNullable<typeof span> => span !== undefined)
+          .map((span) => ({
+            startSeconds: span.startSeconds,
+            endSeconds: span.endSeconds,
+          }));
+
+        const envelope = buildDuckEnvelope(entry.startSeconds, duckSpans, beat.duckTo);
+        // Remotion hands this a frame relative to the Sequence's own start.
+        volume = (frame: number) => envelope(frame / fps);
+      }
+
+      return {
+        beatId: entry.beatId,
+        audioPath: entry.audioPath as string,
+        // A position and a span on the timeline: nearest frame, not ceil —
+        // see src/timing/frames.ts for why the two conversions differ.
+        fromFrame: secondsToFrame(entry.startSeconds, fps),
+        durationInFrames: secondsToFrame(entry.endSeconds - entry.startSeconds, fps),
+        volume,
+      };
+    })
+    // A bed clamped to the end of the spine (buildTimingTrack) can round to
+    // under a full frame, including exactly zero — e.g. a bed placed after
+    // the last narration beat. Remotion's <Sequence> throws on a
+    // non-positive durationInFrames, and a beat with no frames has no audio
+    // to place anyway, so drop it here rather than crash the render.
+    .filter((spec) => spec.durationInFrames >= 1);
 }
 
 export const CuecastComposition: React.FC<CuecastCompositionProps> = ({
@@ -78,11 +116,11 @@ export const CuecastComposition: React.FC<CuecastCompositionProps> = ({
       />
       {audioSequences.map((sequence) => (
         <Sequence
-          key={sequence.audioPath}
+          key={sequence.beatId}
           from={sequence.fromFrame}
           durationInFrames={sequence.durationInFrames}
         >
-          <Audio src={staticFile(sequence.audioPath)} />
+          <Audio src={staticFile(sequence.audioPath)} volume={sequence.volume} />
         </Sequence>
       ))}
     </AbsoluteFill>

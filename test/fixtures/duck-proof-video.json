@@ -1,0 +1,16 @@
+{
+  "id": "duck_proof",
+  "diagram": {
+    "source": "test/fixtures/generic-container.mmd",
+    "revealGroups": { "group_api": ["api"] }
+  },
+  "script": [
+    { "id": "music", "type": "bed", "audio": "test/fixtures/tone.wav", "duck": ["beat_01"], "duckTo": 0.1 },
+    { "id": "beat_01", "type": "narration", "text": "Quiet part.", "spoken": "Quiet part." }
+  ],
+  "pronunciations": {},
+  "timing": [
+    { "beatId": "music", "startSeconds": 0.0, "endSeconds": 3.0, "audioPath": "audio/duck_proof/music.wav" },
+    { "beatId": "beat_01", "startSeconds": 1.5, "endSeconds": 2.5 }
+  ]
+}

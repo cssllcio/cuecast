@@ -5,7 +5,11 @@ import { renderMedia, selectComposition } from "@remotion/renderer";
 import { renderMermaidToSvg } from "../src/mermaid/renderMermaidToSvg.js";
 import { NarrationClient } from "../src/narration/narrationClient.js";
 import { resolveBeatSeed } from "../src/narration/beatSeed.js";
-import { buildTimingTrack, decorateTimingTrack } from "../src/timing/timingExtractor.js";
+import {
+  buildTimingTrack,
+  decorateTimingTrack,
+  describeBedClamps,
+} from "../src/timing/timingExtractor.js";
 import { mergeLexicons } from "../src/pronunciation/lexicon.js";
 import { spokenForBeat } from "../src/pronunciation/spokenForBeat.js";
 import { parseVideoScript, type VideoScript } from "../src/schema/videoScript.js";
@@ -13,6 +17,7 @@ import { cuecastWebpackOverride } from "../src/remotion/webpackOverride.js";
 import { publicAudioPath } from "../src/audio/publicAudioPath.js";
 import { probeAudioDurationSeconds } from "../src/audio/probeAudioDuration.js";
 import { secondsToDurationFrames } from "../src/timing/frames.js";
+import { timelineDurationSeconds } from "../src/timing/timelineDuration.js";
 import baseLexicon from "../lexicon/base.json" with { type: "json" };
 
 export async function renderVideo(
@@ -77,6 +82,12 @@ export async function renderVideo(
     audioPaths,
     seeds
   );
+  for (const clamp of describeBedClamps(videoScript.script, durations, timing)) {
+    console.error(
+      `cuecast: bed beat "${clamp.beatId}" was cut from ${clamp.requestedSeconds.toFixed(2)}s ` +
+        `to ${clamp.actualSeconds.toFixed(2)}s — it outlasts the narration it plays under`
+    );
+  }
   const finalVideoScript: VideoScript = { ...videoScript, timing };
 
   // renderMermaidToSvg (and mmdc underneath it) refuses to write into a
@@ -125,7 +136,7 @@ export async function renderVideo(
     composition: {
       ...composition,
       durationInFrames: secondsToDurationFrames(
-        finalVideoScript.timing.at(-1)?.endSeconds ?? 5,
+        timelineDurationSeconds(finalVideoScript.timing),
         composition.fps
       ),
     },
