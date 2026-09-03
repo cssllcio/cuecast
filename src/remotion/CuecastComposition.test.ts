@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { VideoScript } from "../schema/videoScript.js";
+import type { ScriptBeat, VideoScript } from "../schema/videoScript.js";
 import { buildAudioSequences } from "./CuecastComposition.js";
+import { buildTimingTrack, decorateTimingTrack } from "../timing/timingExtractor.js";
 
 describe("buildAudioSequences", () => {
   it("converts each timing entry with an audioPath into a frame-positioned sequence", () => {
@@ -34,6 +35,83 @@ describe("buildAudioSequences", () => {
     };
 
     expect(buildAudioSequences(videoScript, 30)).toEqual([]);
+  });
+
+  // Regression: a bed clamped to the end of the spine (buildTimingTrack) can
+  // round to under a full frame, including exactly zero — e.g. a trailing
+  // outro bed with no narration after it. Remotion's <Sequence> throws on a
+  // non-positive durationInFrames ("durationInFrames ... must be positive,
+  // but got 0"), so a spec like this must never reach the composition.
+  it("drops a spec with less than one frame of duration", () => {
+    const videoScript: VideoScript = {
+      id: "example_video",
+      diagram: { source: "x.mmd", revealGroups: {} },
+      script: [],
+      pronunciations: {},
+      timing: [
+        { beatId: "beat_01", startSeconds: 0, endSeconds: 2, audioPath: "audio/beat_01.wav" },
+        // Zero length, exactly — the degenerate case a trailing bed clamps to.
+        { beatId: "outro", startSeconds: 2, endSeconds: 2, audioPath: "audio/outro.wav" },
+        // Sub-frame but not zero (0.01s * 30fps = 0.3 frames, rounds to 0) —
+        // the "under half a frame" case, not only the exactly-zero one.
+        { beatId: "sting", startSeconds: 2, endSeconds: 2.01, audioPath: "audio/sting.wav" },
+      ],
+    };
+
+    const sequences = buildAudioSequences(videoScript, 30);
+
+    expect(sequences).toEqual([
+      { beatId: "beat_01", audioPath: "audio/beat_01.wav", fromFrame: 0, durationInFrames: 60, volume: 1 },
+    ]);
+  });
+});
+
+describe("the clamp-to-render seam", () => {
+  // Every other test in this file hand-authors its `timing` array. That is
+  // exactly the gap the zero-length-bed regression fell through: one test
+  // (timingExtractor.test.ts) asserts buildTimingTrack produces a
+  // zero-length bed entry, another asserts buildAudioSequences builds specs,
+  // and nothing fed the first's real output into the second. This test
+  // closes that seam by running the real pipeline — buildTimingTrack, then
+  // decorateTimingTrack, exactly as scripts/render-video.ts does — and
+  // asserting the result buildAudioSequences hands to Remotion never has
+  // less than a full frame of audio.
+  it("never hands buildAudioSequences a bed spec with less than a full frame", () => {
+    const beats: ScriptBeat[] = [
+      { id: "beat_01", type: "narration", text: "t", spoken: "t" },
+      { id: "outro", type: "bed", audio: "sting.wav" },
+    ];
+    const durations = new Map([
+      ["beat_01", 2],
+      ["outro", 5], // outlasts the spine — clamps to zero, per design §2.
+    ]);
+    const audioPaths = new Map([
+      ["beat_01", "audio/v1/beat_01.wav"],
+      ["outro", "audio/v1/outro.wav"],
+    ]);
+
+    const timing = decorateTimingTrack(
+      buildTimingTrack(beats, durations),
+      audioPaths,
+      new Map()
+    );
+    const videoScript: VideoScript = {
+      id: "v1",
+      diagram: { source: "x.mmd", revealGroups: {} },
+      script: beats,
+      pronunciations: {},
+      timing,
+    };
+
+    const sequences = buildAudioSequences(videoScript, 30);
+
+    for (const spec of sequences) {
+      expect(spec.durationInFrames).toBeGreaterThanOrEqual(1);
+    }
+    // The clamped-to-zero outro must not appear at all, not appear with a
+    // zero or negative duration.
+    expect(sequences.some((spec) => spec.beatId === "outro")).toBe(false);
+    expect(sequences.map((spec) => spec.beatId)).toEqual(["beat_01"]);
   });
 });
 

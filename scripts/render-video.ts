@@ -17,6 +17,7 @@ import { cuecastWebpackOverride } from "../src/remotion/webpackOverride.js";
 import { publicAudioPath } from "../src/audio/publicAudioPath.js";
 import { probeAudioDurationSeconds } from "../src/audio/probeAudioDuration.js";
 import { secondsToDurationFrames } from "../src/timing/frames.js";
+import { timelineDurationSeconds } from "../src/timing/timelineDuration.js";
 import baseLexicon from "../lexicon/base.json" with { type: "json" };
 
 export async function renderVideo(
@@ -135,9 +136,7 @@ export async function renderVideo(
     composition: {
       ...composition,
       durationInFrames: secondsToDurationFrames(
-        finalVideoScript.timing.length
-          ? Math.max(...finalVideoScript.timing.map((entry) => entry.endSeconds))
-          : 5,
+        timelineDurationSeconds(finalVideoScript.timing),
         composition.fps
       ),
     },

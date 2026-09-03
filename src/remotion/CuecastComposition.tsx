@@ -60,11 +60,7 @@ export function buildAudioSequences(
             endSeconds: span.endSeconds,
           }));
 
-        const envelope = buildDuckEnvelope(
-          { startSeconds: entry.startSeconds, endSeconds: entry.endSeconds },
-          duckSpans,
-          beat.duckTo
-        );
+        const envelope = buildDuckEnvelope(entry.startSeconds, duckSpans, beat.duckTo);
         // Remotion hands this a frame relative to the Sequence's own start.
         volume = (frame: number) => envelope(frame / fps);
       }
@@ -78,7 +74,13 @@ export function buildAudioSequences(
         durationInFrames: secondsToFrame(entry.endSeconds - entry.startSeconds, fps),
         volume,
       };
-    });
+    })
+    // A bed clamped to the end of the spine (buildTimingTrack) can round to
+    // under a full frame, including exactly zero — e.g. a bed placed after
+    // the last narration beat. Remotion's <Sequence> throws on a
+    // non-positive durationInFrames, and a beat with no frames has no audio
+    // to place anyway, so drop it here rather than crash the render.
+    .filter((spec) => spec.durationInFrames >= 1);
 }
 
 export const CuecastComposition: React.FC<CuecastCompositionProps> = ({
