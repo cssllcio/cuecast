@@ -1,6 +1,7 @@
 # cuecast — ducking, CLI, and captions, design
 
-**Status:** design, awaiting maintainer review · **Date:** 2026-09-02
+**Status:** design, revised 2026-09-02 against the merged render/lexicon
+fixes (#10) and the seeded-narration work (#12) · **Date:** 2026-09-02
 **Implements:** build-order steps 5 and 6 of
 `docs/superpowers/specs/2026-08-20-cuecast-design.md` (§7). Steps 1–4 are
 built and merged; step 7 (pilot integration into a consuming product) is
@@ -53,10 +54,24 @@ Two consequences, both of which are edits, not opinions:
   bed's end is at or before the spine's. Two call sites read the last entry
   today and would both cut the video short.
 
-A bed clamped to zero length — one placed after the last narration beat —
-is a silent no-op. The pipeline reports it on stderr. This repo has
-shipped two silent-audio bugs already (issue #1, PR #3); the third is not
-free.
+**Any clamp is reported on stderr, not only the degenerate one.** An
+earlier draft of this design warned only about a bed clamped to *zero* — one
+placed after the last narration beat. That is backwards: a bed clamped from
+60s to 10s loses 50 seconds of audio and is far likelier than the zero case,
+so the lossy clamp is the one that must be named. Both are reported, with the
+requested and actual durations. This repo has shipped two silent-audio bugs
+already (issue #1, PR #3); the third is not free.
+
+**Two mechanical notes for whoever implements this**, both from work merged
+after the first draft:
+
+- The timing track is now built in two steps, not one. `buildTimingTrack`
+  produces the spans; `decorateTimingTrack` then attaches `audioPath` and
+  `seed`. The parallel-lane change belongs in the first; the second is
+  untouched.
+- `TimingEntry` now carries a generated `seed` (#12). The clamping pass
+  rewrites bed entries' `endSeconds`, so it must preserve every other field
+  rather than rebuilding the entry from scratch.
 
 ## 3 · Ducking is a mechanism, and the level is authored
 
@@ -114,6 +129,17 @@ emit; the typecheck becomes `npm run typecheck`.
 The alternative — running TypeScript through a loader at invocation time —
 avoids a build artifact but leaves the shipped thing untested and the
 package unable to be consumed as a library. The pilot needs both.
+
+Moving `renderVideo` out of `scripts/` and into `src/` matters for a second
+reason, discovered after this design was first written. `npm test` is
+`vitest run src`, so **nothing under `scripts/` is covered by the default
+suite at all**. That gap is not theoretical: during #12's final review,
+changing `beat.seed ?? beatSeed(...)` to `beat.seed || …` in
+`scripts/render-video.ts` passed the typecheck and all 73 tests while
+silently discarding an authored seed of `0`. The orchestration is the part
+of this pipeline most worth testing and the only part currently exempt.
+Relocating it closes that for the whole file, which is a better argument for
+the move than tsconfig mechanics.
 
 Arg parsing is Node 20's built-in `node:util` `parseArgs`. `engines.node`
 is already `">=20"`, and the repo's instinct is visibly to hand-roll small
@@ -187,9 +213,15 @@ The file stem comes from `--out`, not from the video id, so
 - **The compile step is the risky change**, not ducking. It moves the
   pipeline entry point into `src/`, changes what `npm run build` does, and
   relocates every intermediate artifact. It should land on its own.
-- **`Root.tsx` imports a test fixture at module scope** for its
-  `defaultProps`. `test/` will not ship, so a published package's bundle
-  would break. A minimal default belongs in `src/`.
+- **`Root.tsx` imports two test fixtures at module scope** for its
+  `defaultProps` — the script JSON, and a 26,394-byte SVG through the `?raw`
+  webpack rule. `test/` will not ship, so a published package's bundle breaks
+  on both. Inlining a minimal default into `src/` answers the JSON and is
+  absurd for the SVG. The better fix is for `defaultProps` to carry an empty
+  `svgContent`: `inputProps` always override it in every real render, and
+  passing them to `selectComposition` has been mandatory since PR #3. The
+  defaults exist to make the composition selectable, not to render anything
+  anyone watches.
 - **A duck is hard to prove.** A whole-file level check cannot see one; the
   render test has to measure a ducked window against an open window and
   assert a real difference. Measuring the thing itself rather than a proxy
@@ -197,6 +229,17 @@ The file stem comes from `--out`, not from the video id, so
 - **Nothing here is verifiable from the repo root alone.** Whether the CLI
   actually works from another directory has to be checked from another
   directory, by hand, once.
+- **The integration suite must run with `--no-file-parallelism`.** This is no
+  longer a preference. On 2026-09-02 two integration files generating
+  concurrently wedged a local Voicebox: its worker died, jobs stuck at
+  `loading_model` indefinitely, and it took a manual restart. Phase 2 reworks
+  that suite to run through the built binary, so the flag lands with it.
+- **§3's `superRefine` will not be the only one.** Issue #13 proposes a second
+  cross-field validation on the same script array, rejecting duplicate beat
+  ids. Both want the same hook in the same file, and duplicate ids interact
+  with `duck` directly — a `duck` entry naming an id shared by two beats is
+  ambiguous in exactly the way this design's validation is meant to prevent.
+  Design the two together rather than bolting the second onto the first.
 
 ## 7 · Explicitly out of scope
 
