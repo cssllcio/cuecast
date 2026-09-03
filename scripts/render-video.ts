@@ -4,7 +4,8 @@ import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { renderMermaidToSvg } from "../src/mermaid/renderMermaidToSvg.js";
 import { NarrationClient } from "../src/narration/narrationClient.js";
-import { buildTimingTrack } from "../src/timing/timingExtractor.js";
+import { resolveBeatSeed } from "../src/narration/beatSeed.js";
+import { buildTimingTrack, decorateTimingTrack } from "../src/timing/timingExtractor.js";
 import { mergeLexicons } from "../src/pronunciation/lexicon.js";
 import { spokenForBeat } from "../src/pronunciation/spokenForBeat.js";
 import { parseVideoScript, type VideoScript } from "../src/schema/videoScript.js";
@@ -55,12 +56,15 @@ export async function renderVideo(
   });
   const durations = new Map<string, number>();
   const audioPaths = new Map<string, string>();
+  const seeds = new Map<string, number>();
 
   for (const beat of videoScript.script) {
     if (beat.type === "narration") {
       const spoken = spokenForBeat(beat, lexicon);
-      const { audioPath, durationSeconds } = await client.generate(spoken);
+      const seed = resolveBeatSeed(beat, videoScript.id);
+      const { audioPath, durationSeconds } = await client.generate(spoken, seed);
       durations.set(beat.id, durationSeconds);
+      seeds.set(beat.id, seed);
       audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, audioPath));
     } else if (beat.type === "bed") {
       durations.set(beat.id, await probeAudioDurationSeconds(beat.audio));
@@ -68,11 +72,10 @@ export async function renderVideo(
     }
   }
 
-  const timing = buildTimingTrack(videoScript.script, durations).map(
-    (entry) => {
-      const audioPath = audioPaths.get(entry.beatId);
-      return audioPath ? { ...entry, audioPath } : entry;
-    }
+  const timing = decorateTimingTrack(
+    buildTimingTrack(videoScript.script, durations),
+    audioPaths,
+    seeds
   );
   const finalVideoScript: VideoScript = { ...videoScript, timing };
 

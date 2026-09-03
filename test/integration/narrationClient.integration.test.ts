@@ -25,7 +25,7 @@ describe.skipIf(!baseUrl)("NarrationClient (live service)", () => {
       audioOutputDir,
     });
 
-    const result = await client.generate("This is a live generation check.");
+    const result = await client.generate("This is a live generation check.", 4000);
 
     expect(result.durationSeconds).toBeGreaterThan(0);
     expect(existsSync(result.audioPath)).toBe(true);

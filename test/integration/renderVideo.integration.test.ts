@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import { renderVideo } from "../../scripts/render-video.js";
@@ -30,4 +30,25 @@ describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
     expect(maxVolumeMatch).not.toBeNull();
     expect(Number(maxVolumeMatch?.[1])).toBeGreaterThan(-50);
   });
+
+  // The property the whole change exists for. A file-level or duration-level
+  // check would not catch a timing track that drifts; comparing the tracks
+  // themselves is the thing itself.
+  it("renders the same script to the same timing twice", async () => {
+    const readTiming = () =>
+      JSON.parse(
+        readFileSync("generated/current-render-video.json", "utf-8")
+      ).timing;
+
+    await renderVideo("test/fixtures/example-video.json", "out/repro-a.mp4");
+    const first = readTiming();
+
+    await renderVideo("test/fixtures/example-video.json", "out/repro-b.mp4");
+    const second = readTiming();
+
+    expect(second).toEqual(first);
+    // Guard against the test passing vacuously if timing were ever empty.
+    expect(first.length).toBeGreaterThan(0);
+    expect(first.some((entry: { seed?: number }) => entry.seed !== undefined)).toBe(true);
+  }, 600_000);
 }, 600_000);
