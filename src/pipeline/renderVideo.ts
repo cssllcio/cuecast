@@ -104,8 +104,9 @@ export async function renderVideo(options: RenderVideoOptions): Promise<void> {
   // renderMermaidToSvg (and mmdc underneath it) refuses to write into a
   // missing output directory ("Output directory ... doesn't exist") rather
   // than creating one, unlike its own test which pre-creates a temp dir —
-  // confirmed by running it against a fresh checkout with no `generated/`
-  // present. `generated/` is gitignored, so it won't exist on a clean clone.
+  // confirmed by running it against a fresh checkout with no work dir
+  // present. workDir is per-run scratch under the caller's cwd (see
+  // src/paths.ts's resolveWorkDir) and won't exist yet on a first run.
   mkdirSync(workDir, { recursive: true });
 
   const { svgPath } = await renderMermaidToSvg({

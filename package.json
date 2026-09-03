@@ -13,7 +13,7 @@
     "test:all": "vitest run"
   },
   "bin": { "cuecast": "dist/cli/cuecast.js" },
-  "files": ["dist", "src", "lexicon"],
+  "files": ["dist", "src", "!src/**/*.test.ts", "lexicon", "tsconfig.json"],
   "dependencies": {
     "@mermaid-js/mermaid-cli": "^11.4.0",
     "@remotion/cli": "^4.0.0",

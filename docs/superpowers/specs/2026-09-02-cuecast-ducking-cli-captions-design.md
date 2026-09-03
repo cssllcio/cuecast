@@ -138,8 +138,18 @@ changing `beat.seed ?? beatSeed(...)` to `beat.seed || …` in
 `scripts/render-video.ts` passed the typecheck and all 73 tests while
 silently discarding an authored seed of `0`. The orchestration is the part
 of this pipeline most worth testing and the only part currently exempt.
-Relocating it closes that for the whole file, which is a better argument for
-the move than tsconfig mechanics.
+
+Relocating it does not, by itself, close that gap: vitest collects test
+files, not source files, and `src/pipeline/renderVideo.ts` is imported only
+by the CLI and by the TTS-gated integration suite, so `npm test` still
+exercises none of it directly. What the move buys is that the pieces the
+orchestration is built from — `resolveBeatSeed`, `decorateTimingTrack`, and
+the rest — are no longer trapped inside an uncovered file with them; each
+can be pulled out and given its own fast-suite test, which is exactly what
+would have caught the `??`-to-`||` regression. The orchestration itself
+remains covered only by the (unrun-by-default) integration suite. That is a
+better argument for the move than tsconfig mechanics, even though it is a
+smaller claim than "closes the gap."
 
 Arg parsing is Node 20's built-in `node:util` `parseArgs`. `engines.node`
 is already `">=20"`, and the repo's instinct is visibly to hand-roll small
