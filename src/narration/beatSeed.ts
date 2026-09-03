@@ -20,8 +20,12 @@ import type { NarrationBeat } from "../schema/videoScript.js";
 // collide: under a space, ("a b","c") and ("a","b c") key identically.
 // NUL is not a complete fix, though — `& 0xff` below truncates every UTF-16
 // code unit to its low byte, so a character whose low byte happens to be
-// 0x00 (U+0100, U+0200, …) is indistinguishable from this separator too:
-// beatSeed("aĀ", "b") === beatSeed("a", " b"). That residual case is
+// 0x00 (U+0100, U+0200, ...) truncates to the same byte as a literal NUL.
+// Spelled out as escaped code points below, not literal characters, so
+// nothing gets lost in a copy: beatSeed("a\u0100", "b") ===
+// beatSeed("a\u0000", "b") (verified: both equal 1474457130), because
+// both keys reduce to the same low-byte sequence 0x61, 0x00, 0x00, 0x62
+// once the separator's own 0x00 is appended. That residual case is
 // benign, not exploitable: the two colliding beats still have different
 // `text`/`spoken` content, so they still produce different audio even
 // though the seed that generated it is shared.
