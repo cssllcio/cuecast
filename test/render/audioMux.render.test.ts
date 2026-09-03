@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { cuecastWebpackOverride } from "../../src/remotion/webpackOverride.js";
 import { publicAudioPath } from "../../src/audio/publicAudioPath.js";
 import type { VideoScript } from "../../src/schema/videoScript.js";
+import { remotionEntryPoint } from "../../src/paths.js";
 
 describe("Cuecast composition audio muxing", () => {
   it("mixes a bed beat's audio into the rendered video", async () => {
@@ -47,7 +48,7 @@ describe("Cuecast composition audio muxing", () => {
     const inputProps = { videoScript, svgContent };
 
     const bundleLocation = await bundle({
-      entryPoint: "src/remotion/Root.tsx",
+      entryPoint: remotionEntryPoint(),
       webpackOverride: cuecastWebpackOverride,
     });
     const composition = await selectComposition({

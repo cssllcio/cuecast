@@ -6,6 +6,7 @@ import { cuecastWebpackOverride } from "../../src/remotion/webpackOverride.js";
 import { parseVideoScript } from "../../src/schema/videoScript.js";
 import { timelineDurationSeconds } from "../../src/timing/timelineDuration.js";
 import { secondsToDurationFrames } from "../../src/timing/frames.js";
+import { remotionEntryPoint } from "../../src/paths.js";
 
 const FPS = 30; // Must match Root.tsx's own FPS.
 
@@ -24,7 +25,7 @@ describe("Cuecast composition render", () => {
     const inputProps = { videoScript, svgContent };
 
     const bundleLocation = await bundle({
-      entryPoint: "src/remotion/Root.tsx",
+      entryPoint: remotionEntryPoint(),
       webpackOverride: cuecastWebpackOverride,
     });
     // inputProps must be passed here as well as to renderMedia — omitting it
