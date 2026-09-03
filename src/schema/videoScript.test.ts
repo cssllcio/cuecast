@@ -141,3 +141,62 @@ describe("seed", () => {
     expect(parsed.timing[0]).toMatchObject({ seed: 4000 });
   });
 });
+
+describe("duck", () => {
+  const bedScript = (bed: Record<string, unknown>) => ({
+    ...validScript,
+    script: [...validScript.script, { id: "music", type: "bed", audio: "m.wav", ...bed }],
+  });
+
+  it("accepts a bed beat with no duck at all", () => {
+    expect(() => parseVideoScript(bedScript({}))).not.toThrow();
+  });
+
+  it("accepts an empty duck list without requiring duckTo", () => {
+    expect(() => parseVideoScript(bedScript({ duck: [] }))).not.toThrow();
+  });
+
+  it("accepts a duck naming a real narration beat when duckTo is given", () => {
+    const parsed = parseVideoScript(
+      bedScript({ duck: ["beat_01"], duckTo: 0.25 })
+    );
+    expect(parsed.script[2]).toMatchObject({ duck: ["beat_01"], duckTo: 0.25 });
+  });
+
+  // The spec forbids a product-specific preset living in this repo, and a
+  // default gain IS a preset — so there is nothing to fall back on and the
+  // author must state the level.
+  it("rejects a non-empty duck with no duckTo", () => {
+    expect(() => parseVideoScript(bedScript({ duck: ["beat_01"] }))).toThrow(
+      /duckTo/
+    );
+  });
+
+  // A typo'd id would otherwise duck nothing at all, silently — the failure
+  // shape this repo hit with issue #1 and the dead lexicon.
+  it("rejects a duck naming a beat that does not exist", () => {
+    expect(() =>
+      parseVideoScript(bedScript({ duck: ["beat_99"], duckTo: 0.25 }))
+    ).toThrow(/beat_99/);
+  });
+
+  it("rejects a duck naming a silence beat", () => {
+    expect(() =>
+      parseVideoScript(bedScript({ duck: ["beat_02"], duckTo: 0.25 }))
+    ).toThrow(/beat_02/);
+  });
+
+  it("rejects a duckTo outside (0, 1]", () => {
+    for (const bad of [0, -0.1, 1.5]) {
+      expect(() =>
+        parseVideoScript(bedScript({ duck: ["beat_01"], duckTo: bad }))
+      ).toThrow();
+    }
+  });
+
+  it("accepts a duckTo of exactly 1", () => {
+    expect(() =>
+      parseVideoScript(bedScript({ duck: ["beat_01"], duckTo: 1 }))
+    ).not.toThrow();
+  });
+});
