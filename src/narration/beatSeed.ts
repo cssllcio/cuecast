@@ -51,12 +51,11 @@ export function beatSeed(videoId: string, beatId: string): number {
 
 /**
  * The seed a narration beat actually resolves to: an authored override when
- * present, otherwise the beat's derived identity seed. Pulled out of
- * scripts/render-video.ts (untested — `npm test` is `vitest run src`, so
- * `scripts/` is not covered) because `beat.seed ?? beatSeed(...)` and
- * `beat.seed || beatSeed(...)` type-check identically but disagree on an
- * authored seed of 0 — the same bug shape as the dead-lexicon
- * `beat.spoken || applyLexicon(...)` bug (design §5).
+ * present, otherwise the beat's derived identity seed. Extracted out of
+ * src/pipeline/renderVideo.ts to be unit-testable on its own, because
+ * `beat.seed ?? beatSeed(...)` and `beat.seed || beatSeed(...)` type-check
+ * identically but disagree on an authored seed of 0 — the same bug shape as
+ * the dead-lexicon `beat.spoken || applyLexicon(...)` bug (design §5).
  */
 export function resolveBeatSeed(beat: NarrationBeat, videoId: string): number {
   return beat.seed ?? beatSeed(videoId, beat.id);

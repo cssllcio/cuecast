@@ -1,11 +1,11 @@
 {
   "id": "duck_proof",
   "diagram": {
-    "source": "test/fixtures/generic-container.mmd",
+    "source": "generic-container.mmd",
     "revealGroups": { "group_api": ["api"] }
   },
   "script": [
-    { "id": "music", "type": "bed", "audio": "test/fixtures/tone.wav", "duck": ["beat_01"], "duckTo": 0.1 },
+    { "id": "music", "type": "bed", "audio": "tone.wav", "duck": ["beat_01"], "duckTo": 0.1 },
     { "id": "beat_01", "type": "narration", "text": "Quiet part.", "spoken": "Quiet part." }
   ],
   "pronunciations": {},

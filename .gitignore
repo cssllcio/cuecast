@@ -3,5 +3,6 @@ dist/
 out/
 generated/
 public/audio/
+.cuecast/
 *.mp4
 .env

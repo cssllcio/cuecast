@@ -1,14 +1,26 @@
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { execa } from "execa";
 import { describe, expect, it } from "vitest";
-import { renderVideo } from "../../scripts/render-video.js";
+import { renderVideo } from "../../src/pipeline/renderVideo.js";
+import { packageRoot } from "../../src/paths.js";
 
 const baseUrl = process.env.CUECAST_TTS_URL;
 
 describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
   it("generates narration, lays out timing, and renders a video that actually carries the narration audio", async () => {
     const outputPath = "out/example-video.mp4";
-    await renderVideo("test/fixtures/example-video.json", outputPath);
+    await renderVideo({
+      scriptPath: resolve("test/fixtures/example-video.json"),
+      outPath: resolve(outputPath),
+      workDir: resolve(".cuecast/example_video"),
+    });
 
     expect(existsSync(outputPath)).toBe(true);
 
@@ -35,20 +47,56 @@ describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
   // check would not catch a timing track that drifts; comparing the tracks
   // themselves is the thing itself.
   it("renders the same script to the same timing twice", async () => {
-    const readTiming = () =>
+    const readTiming = (workDir: string) =>
       JSON.parse(
-        readFileSync("generated/current-render-video.json", "utf-8")
+        readFileSync(resolve(workDir, "resolved-video.json"), "utf-8")
       ).timing;
 
-    await renderVideo("test/fixtures/example-video.json", "out/repro-a.mp4");
-    const first = readTiming();
+    await renderVideo({
+      scriptPath: resolve("test/fixtures/example-video.json"),
+      outPath: resolve("out/repro-a.mp4"),
+      workDir: resolve(".cuecast/repro_a"),
+    });
+    const first = readTiming(".cuecast/repro_a");
 
-    await renderVideo("test/fixtures/example-video.json", "out/repro-b.mp4");
-    const second = readTiming();
+    await renderVideo({
+      scriptPath: resolve("test/fixtures/example-video.json"),
+      outPath: resolve("out/repro-b.mp4"),
+      workDir: resolve(".cuecast/repro_b"),
+    });
+    const second = readTiming(".cuecast/repro_b");
 
     expect(second).toEqual(first);
     // Guard against the test passing vacuously if timing were ever empty.
     expect(first.length).toBeGreaterThan(0);
     expect(first.some((entry: { seed?: number }) => entry.seed !== undefined)).toBe(true);
+  }, 600_000);
+
+  // Exercises what actually ships. Testing renderVideo() directly would leave
+  // the compiled bin — the only thing a consuming product runs — unverified.
+  it("renders through the built binary, from a directory outside the repo", async () => {
+    await execa("npm", ["run", "build"], { cwd: packageRoot() });
+
+    const cwd = mkdtempSync(join(tmpdir(), "cuecast-cli-"));
+    const outPath = join(cwd, "cli-render.mp4");
+
+    await execa(
+      "node",
+      [
+        join(packageRoot(), "dist/cli/cuecast.js"),
+        "build",
+        join(packageRoot(), "test/fixtures/example-video.json"),
+        "--out",
+        outPath,
+      ],
+      { cwd, env: process.env }
+    );
+
+    expect(existsSync(outPath)).toBe(true);
+    // The work dir belongs to the caller's directory, not the package.
+    expect(existsSync(join(cwd, ".cuecast", "example_video"))).toBe(true);
+    expect(existsSync(join(packageRoot(), "generated"))).toBe(false);
+
+    rmSync(cwd, { recursive: true, force: true });
   }, 600_000);
 }, 600_000);

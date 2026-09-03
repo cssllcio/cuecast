@@ -5,6 +5,7 @@ import { execa } from "execa";
 import { describe, expect, it } from "vitest";
 import { parseVideoScript } from "../../src/schema/videoScript.js";
 import { cuecastWebpackOverride } from "../../src/remotion/webpackOverride.js";
+import { remotionEntryPoint } from "../../src/paths.js";
 
 async function maxVolumeDb(file: string, startSeconds: number, seconds: number) {
   // volumedetect over a slice: a whole-file measurement cannot see a duck,
@@ -52,7 +53,7 @@ describe("bed ducking", () => {
     const inputProps = { videoScript, svgContent };
 
     const bundleLocation = await bundle({
-      entryPoint: "src/remotion/Root.tsx",
+      entryPoint: remotionEntryPoint(),
       webpackOverride: cuecastWebpackOverride,
     });
     // inputProps must be passed here as well as to renderMedia — omitting it

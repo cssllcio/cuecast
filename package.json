@@ -5,12 +5,16 @@
   "type": "module",
   "engines": { "node": ">=20" },
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run src",
     "test:integration": "vitest run test/integration",
     "test:render": "vitest run test/render",
+    "test:bin": "vitest run test/bin",
     "test:all": "vitest run"
   },
+  "bin": { "cuecast": "dist/cli/cuecast.js" },
+  "files": ["dist", "src", "!src/**/*.test.ts", "lexicon", "tsconfig.json"],
   "dependencies": {
     "@mermaid-js/mermaid-cli": "^11.4.0",
     "@remotion/cli": "^4.0.0",

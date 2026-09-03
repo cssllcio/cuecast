@@ -9,8 +9,11 @@ import { extname } from "node:path";
 //
 // Both ids come from free-form JSON and end up as a path on disk, so a
 // separator or parent reference in either would let a crafted id write
-// outside public/audio/. Reject them here, at the one place the path is
-// formed.
+// outside public/audio/. Reject them here — and, since `videoId` is also
+// used to name the run's whole work dir (src/paths.ts's resolveWorkDir,
+// called from src/cli/cuecast.ts before this function is ever reached),
+// assertPathSafeId is exported so that call site can apply the same guard
+// instead of growing a second, divergent one.
 export function publicAudioPath(videoId: string, beatId: string, sourcePath: string): string {
   assertPathSafeId(videoId, "video id");
   assertPathSafeId(beatId, "beat id");
@@ -30,7 +33,7 @@ export function publicAudioPath(videoId: string, beatId: string, sourcePath: str
 // Collision: "" and "." don't name a directory at all — they normalize away
 // (`audio//x` and `audio/./x` both become `audio/x`), which silently undoes
 // the per-video namespacing this function exists to provide.
-function assertPathSafeId(id: string, label: string): void {
+export function assertPathSafeId(id: string, label: string): void {
   if (id.includes("/") || id.includes("\\")) {
     throw new Error(`${label} "${id}" must not contain a path separator`);
   }

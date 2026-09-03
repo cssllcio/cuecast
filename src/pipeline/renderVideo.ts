@@ -1,29 +1,37 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
-import { renderMermaidToSvg } from "../src/mermaid/renderMermaidToSvg.js";
-import { NarrationClient } from "../src/narration/narrationClient.js";
-import { resolveBeatSeed } from "../src/narration/beatSeed.js";
+import { remotionEntryPoint } from "../paths.js";
+import { renderMermaidToSvg } from "../mermaid/renderMermaidToSvg.js";
+import { NarrationClient } from "../narration/narrationClient.js";
+import { resolveBeatSeed } from "../narration/beatSeed.js";
 import {
   buildTimingTrack,
   decorateTimingTrack,
   describeBedClamps,
-} from "../src/timing/timingExtractor.js";
-import { mergeLexicons } from "../src/pronunciation/lexicon.js";
-import { spokenForBeat } from "../src/pronunciation/spokenForBeat.js";
-import { parseVideoScript, type VideoScript } from "../src/schema/videoScript.js";
-import { cuecastWebpackOverride } from "../src/remotion/webpackOverride.js";
-import { publicAudioPath } from "../src/audio/publicAudioPath.js";
-import { probeAudioDurationSeconds } from "../src/audio/probeAudioDuration.js";
-import { secondsToDurationFrames } from "../src/timing/frames.js";
-import { timelineDurationSeconds } from "../src/timing/timelineDuration.js";
-import baseLexicon from "../lexicon/base.json" with { type: "json" };
+} from "../timing/timingExtractor.js";
+import { mergeLexicons } from "../pronunciation/lexicon.js";
+import { spokenForBeat } from "../pronunciation/spokenForBeat.js";
+import { parseVideoScript, type VideoScript } from "../schema/videoScript.js";
+import { cuecastWebpackOverride } from "../remotion/webpackOverride.js";
+import { publicAudioPath } from "../audio/publicAudioPath.js";
+import { probeAudioDurationSeconds } from "../audio/probeAudioDuration.js";
+import { secondsToDurationFrames } from "../timing/frames.js";
+import { timelineDurationSeconds } from "../timing/timelineDuration.js";
+import baseLexicon from "../../lexicon/base.json" with { type: "json" };
 
-export async function renderVideo(
-  videoScriptPath: string,
-  outputPath: string
-): Promise<void> {
+export interface RenderVideoOptions {
+  /** Absolute path to the video.json. */
+  scriptPath: string;
+  /** Absolute path to write the rendered mp4 to. */
+  outPath: string;
+  /** Absolute directory for this run's intermediates. */
+  workDir: string;
+}
+
+export async function renderVideo(options: RenderVideoOptions): Promise<void> {
+  const { scriptPath, outPath, workDir } = options;
   const baseUrl = process.env.CUECAST_TTS_URL;
   const profileId = process.env.CUECAST_TTS_PROFILE_ID;
   if (!baseUrl || !profileId) {
@@ -32,7 +40,7 @@ export async function renderVideo(
     );
   }
 
-  const rawJson = JSON.parse(readFileSync(videoScriptPath, "utf-8"));
+  const rawJson = JSON.parse(readFileSync(scriptPath, "utf-8"));
   const videoScript: VideoScript = parseVideoScript(rawJson);
   const lexicon = mergeLexicons(baseLexicon, videoScript.pronunciations);
 
@@ -43,9 +51,11 @@ export async function renderVideo(
   // Audio is namespaced under the video id (issue #4) so two videos that
   // reuse a beat id can't clobber each other; the helper creates the
   // public/audio/<videoId>/ directory itself.
+  const publicDir = join(workDir, "public");
+
   function copyBeatAudioToPublic(beatId: string, sourcePath: string): string {
     const publicPath = publicAudioPath(videoScript.id, beatId, sourcePath);
-    const destination = `public/${publicPath}`;
+    const destination = join(publicDir, publicPath);
     mkdirSync(dirname(destination), { recursive: true });
     copyFileSync(sourcePath, destination);
     return publicPath;
@@ -57,7 +67,7 @@ export async function renderVideo(
   const client = new NarrationClient({
     baseUrl,
     profileId,
-    audioOutputDir: "generated/narration",
+    audioOutputDir: join(workDir, "narration"),
   });
   const durations = new Map<string, number>();
   const audioPaths = new Map<string, string>();
@@ -72,8 +82,9 @@ export async function renderVideo(
       seeds.set(beat.id, seed);
       audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, audioPath));
     } else if (beat.type === "bed") {
-      durations.set(beat.id, await probeAudioDurationSeconds(beat.audio));
-      audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, beat.audio));
+      const bedAudioPath = resolve(dirname(scriptPath), beat.audio);
+      durations.set(beat.id, await probeAudioDurationSeconds(bedAudioPath));
+      audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, bedAudioPath));
     }
   }
 
@@ -93,26 +104,28 @@ export async function renderVideo(
   // renderMermaidToSvg (and mmdc underneath it) refuses to write into a
   // missing output directory ("Output directory ... doesn't exist") rather
   // than creating one, unlike its own test which pre-creates a temp dir —
-  // confirmed by running it against a fresh checkout with no `generated/`
-  // present. `generated/` is gitignored, so it won't exist on a clean clone.
-  mkdirSync("generated", { recursive: true });
+  // confirmed by running it against a fresh checkout with no work dir
+  // present. workDir is per-run scratch under the caller's cwd (see
+  // src/paths.ts's resolveWorkDir) and won't exist yet on a first run.
+  mkdirSync(workDir, { recursive: true });
 
   const { svgPath } = await renderMermaidToSvg({
-    inputPath: videoScript.diagram.source,
-    outputDir: "generated",
+    inputPath: resolve(dirname(scriptPath), videoScript.diagram.source),
+    outputDir: workDir,
   });
-  const svgOutputPath = "generated/current-render.svg";
+  const svgOutputPath = join(workDir, "diagram.svg");
   renameSync(svgPath, svgOutputPath);
   const svgContent = readFileSync(svgOutputPath, "utf-8");
 
   writeFileSync(
-    "generated/current-render-video.json",
+    join(workDir, "resolved-video.json"),
     JSON.stringify(finalVideoScript, null, 2)
   );
 
   const bundleLocation = await bundle({
-    entryPoint: "src/remotion/Root.tsx",
+    entryPoint: remotionEntryPoint(),
     webpackOverride: cuecastWebpackOverride,
+    publicDir,
   });
   const inputProps = { videoScript: finalVideoScript, svgContent };
 
@@ -132,6 +145,8 @@ export async function renderVideo(
     inputProps,
   });
 
+  mkdirSync(dirname(outPath), { recursive: true });
+
   await renderMedia({
     composition: {
       ...composition,
@@ -142,7 +157,7 @@ export async function renderVideo(
     },
     serveUrl: bundleLocation,
     codec: "h264",
-    outputLocation: outputPath,
+    outputLocation: outPath,
     inputProps,
   });
 }
