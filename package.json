@@ -10,6 +10,7 @@
     "test": "vitest run src",
     "test:integration": "vitest run test/integration",
     "test:render": "vitest run test/render",
+    "test:bin": "vitest run test/bin",
     "test:all": "vitest run"
   },
   "bin": { "cuecast": "dist/cli/cuecast.js" },

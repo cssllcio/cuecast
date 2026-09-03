@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CliUsageError, parseCliArgs } from "./parseArgs.js";
@@ -103,6 +103,27 @@ export async function main(argv: string[]): Promise<number> {
 // Guarded so importing this module (e.g. from a test) does not also run the
 // CLI against the importing process's own argv — only running it directly
 // (`node dist/cli/cuecast.js`, or via the `cuecast` bin symlink) does.
-if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+//
+// Comparing plain resolve(process.argv[1]) against import.meta.url is wrong:
+// resolve() does not follow symlinks, but Node resolves import.meta.url to
+// the real, symlink-followed path. npm installs `bin` entries as symlinks
+// (node_modules/.bin/cuecast -> .../dist/cli/cuecast.js), which is how
+// `npm install`, `npm link`, and `npx` all invoke this file — so that
+// comparison was false for every real installed invocation and main() never
+// ran. realpathSync follows the symlink so the comparison matches reality;
+// it's wrapped because argv[1] is not guaranteed to name an existing file in
+// every invocation context, and a throwing realpathSync must not crash the
+// module at load (falling through to "not main" is the safe default).
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  try {
+    return realpathSync(entry) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
   process.exitCode = await main(process.argv.slice(2));
 }
