@@ -40,9 +40,9 @@ describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
   // check would not catch a timing track that drifts; comparing the tracks
   // themselves is the thing itself.
   it("renders the same script to the same timing twice", async () => {
-    const readTiming = () =>
+    const readTiming = (workDir: string) =>
       JSON.parse(
-        readFileSync("generated/current-render-video.json", "utf-8")
+        readFileSync(resolve(workDir, "resolved-video.json"), "utf-8")
       ).timing;
 
     await renderVideo({
@@ -50,14 +50,14 @@ describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
       outPath: resolve("out/repro-a.mp4"),
       workDir: resolve(".cuecast/repro_a"),
     });
-    const first = readTiming();
+    const first = readTiming(".cuecast/repro_a");
 
     await renderVideo({
       scriptPath: resolve("test/fixtures/example-video.json"),
       outPath: resolve("out/repro-b.mp4"),
       workDir: resolve(".cuecast/repro_b"),
     });
-    const second = readTiming();
+    const second = readTiming(".cuecast/repro_b");
 
     expect(second).toEqual(first);
     // Guard against the test passing vacuously if timing were ever empty.

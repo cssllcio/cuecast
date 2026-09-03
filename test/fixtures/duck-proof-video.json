@@ -1,7 +1,7 @@
 {
   "id": "duck_proof",
   "diagram": {
-    "source": "test/fixtures/generic-container.mmd",
+    "source": "generic-container.mmd",
     "revealGroups": { "group_api": ["api"] }
   },
   "script": [

@@ -1,7 +1,8 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
+import { remotionEntryPoint } from "../paths.js";
 import { renderMermaidToSvg } from "../mermaid/renderMermaidToSvg.js";
 import { NarrationClient } from "../narration/narrationClient.js";
 import { resolveBeatSeed } from "../narration/beatSeed.js";
@@ -50,9 +51,11 @@ export async function renderVideo(options: RenderVideoOptions): Promise<void> {
   // Audio is namespaced under the video id (issue #4) so two videos that
   // reuse a beat id can't clobber each other; the helper creates the
   // public/audio/<videoId>/ directory itself.
+  const publicDir = join(workDir, "public");
+
   function copyBeatAudioToPublic(beatId: string, sourcePath: string): string {
     const publicPath = publicAudioPath(videoScript.id, beatId, sourcePath);
-    const destination = `public/${publicPath}`;
+    const destination = join(publicDir, publicPath);
     mkdirSync(dirname(destination), { recursive: true });
     copyFileSync(sourcePath, destination);
     return publicPath;
@@ -64,7 +67,7 @@ export async function renderVideo(options: RenderVideoOptions): Promise<void> {
   const client = new NarrationClient({
     baseUrl,
     profileId,
-    audioOutputDir: "generated/narration",
+    audioOutputDir: join(workDir, "narration"),
   });
   const durations = new Map<string, number>();
   const audioPaths = new Map<string, string>();
@@ -79,8 +82,9 @@ export async function renderVideo(options: RenderVideoOptions): Promise<void> {
       seeds.set(beat.id, seed);
       audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, audioPath));
     } else if (beat.type === "bed") {
-      durations.set(beat.id, await probeAudioDurationSeconds(beat.audio));
-      audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, beat.audio));
+      const bedAudioPath = resolve(dirname(scriptPath), beat.audio);
+      durations.set(beat.id, await probeAudioDurationSeconds(bedAudioPath));
+      audioPaths.set(beat.id, copyBeatAudioToPublic(beat.id, bedAudioPath));
     }
   }
 
@@ -102,24 +106,25 @@ export async function renderVideo(options: RenderVideoOptions): Promise<void> {
   // than creating one, unlike its own test which pre-creates a temp dir —
   // confirmed by running it against a fresh checkout with no `generated/`
   // present. `generated/` is gitignored, so it won't exist on a clean clone.
-  mkdirSync("generated", { recursive: true });
+  mkdirSync(workDir, { recursive: true });
 
   const { svgPath } = await renderMermaidToSvg({
-    inputPath: videoScript.diagram.source,
-    outputDir: "generated",
+    inputPath: resolve(dirname(scriptPath), videoScript.diagram.source),
+    outputDir: workDir,
   });
-  const svgOutputPath = "generated/current-render.svg";
+  const svgOutputPath = join(workDir, "diagram.svg");
   renameSync(svgPath, svgOutputPath);
   const svgContent = readFileSync(svgOutputPath, "utf-8");
 
   writeFileSync(
-    "generated/current-render-video.json",
+    join(workDir, "resolved-video.json"),
     JSON.stringify(finalVideoScript, null, 2)
   );
 
   const bundleLocation = await bundle({
-    entryPoint: "src/remotion/Root.tsx",
+    entryPoint: remotionEntryPoint(),
     webpackOverride: cuecastWebpackOverride,
+    publicDir,
   });
   const inputProps = { videoScript: finalVideoScript, svgContent };
 
@@ -138,6 +143,8 @@ export async function renderVideo(options: RenderVideoOptions): Promise<void> {
     id: "Cuecast",
     inputProps,
   });
+
+  mkdirSync(dirname(outPath), { recursive: true });
 
   await renderMedia({
     composition: {

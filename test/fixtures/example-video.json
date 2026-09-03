@@ -1,7 +1,7 @@
 {
   "id": "example_video",
   "diagram": {
-    "source": "test/fixtures/generic-container.mmd",
+    "source": "generic-container.mmd",
     "revealGroups": { "group_api": ["api"], "group_db": ["db"] }
   },
   "script": [
