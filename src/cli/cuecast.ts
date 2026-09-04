@@ -2,11 +2,11 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ZodError } from "zod";
 import { CliUsageError, parseCliArgs } from "./parseArgs.js";
 import { packageRoot, resolveWorkDir } from "../paths.js";
 import { renderVideo } from "../pipeline/renderVideo.js";
 import { parseVideoScript } from "../schema/videoScript.js";
-import { assertPathSafeId } from "../audio/publicAudioPath.js";
 
 const USAGE = `cuecast — narration-timed reveal animations
 
@@ -30,6 +30,30 @@ function version(): string {
     readFileSync(join(packageRoot(), "package.json"), "utf-8")
   ) as { version: string };
   return manifest.version;
+}
+
+/**
+ * What the user sees when their video.json is wrong.
+ *
+ * A ZodError's own `.message` is a JSON dump of its issue array, which is
+ * unreadable in a terminal — and since the schema is what rejects a bad id,
+ * that dump would be the single most common failure a person authoring a
+ * script ever sees. One line per issue, each naming the field path and the
+ * rule it broke.
+ */
+function formatScriptError(scriptPath: string, error: unknown): string {
+  if (error instanceof ZodError) {
+    const issues = error.issues
+      .map((issue) => {
+        const field = issue.path.length > 0 ? issue.path.join(".") : "(root)";
+        return `  ${field}: ${issue.message}\n`;
+      })
+      .join("");
+    return `cuecast: ${scriptPath} is not a valid video script:\n${issues}`;
+  }
+  // Anything else here is a missing file or malformed JSON, where naming the
+  // path and the raw message is already the clearest thing to say.
+  return `cuecast: ${scriptPath}: ${(error as Error).message}\n`;
 }
 
 export async function main(argv: string[]): Promise<number> {
@@ -62,16 +86,16 @@ export async function main(argv: string[]): Promise<number> {
   // the first TTS round trip.
   let videoId: string;
   try {
+    // parseVideoScript is what keeps the id safe to use as a path: the id
+    // becomes one twice over — resolveWorkDir below names this run's whole
+    // work dir after it, and renderVideo later feeds it to publicAudioPath —
+    // and the schema rejects anything outside [A-Za-z0-9_-]+ before either
+    // happens. Parsing here rather than leaving it to renderVideo is what
+    // makes that rejection land before any work dir is created or any TTS
+    // round trip is paid for.
     videoId = parseVideoScript(JSON.parse(readFileSync(scriptPath, "utf-8"))).id;
-    // The id becomes a filesystem path twice over: resolveWorkDir below
-    // names this run's whole work dir after it, and renderVideo later feeds
-    // it to publicAudioPath. Validate it here, before either happens, so a
-    // "." or ".." id (or one with a separator) fails immediately instead of
-    // silently writing outside the work dir it was supposed to be confined
-    // to, or paying for a TTS round trip before dying on the audio path.
-    assertPathSafeId(videoId, "video id");
   } catch (error) {
-    process.stderr.write(`cuecast: ${scriptPath}: ${(error as Error).message}\n`);
+    process.stderr.write(formatScriptError(scriptPath, error));
     return 1;
   }
 
