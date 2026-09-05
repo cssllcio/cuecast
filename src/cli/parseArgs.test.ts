@@ -8,6 +8,7 @@ describe("parseCliArgs", () => {
       scriptPath: "video.json",
       outPath: "out.mp4",
       workDir: undefined,
+      captions: true,
     });
   });
 
@@ -68,5 +69,19 @@ describe("parseCliArgs", () => {
     expect(() =>
       parseCliArgs(["build", "v.json", "--out", "o.mp4", "--work-dir", ""])
     ).toThrow(CliUsageError);
+  });
+});
+
+describe("--no-captions", () => {
+  it("defaults to writing captions", () => {
+    expect(parseCliArgs(["build", "v.json", "--out", "o.mp4"])).toMatchObject({
+      captions: true,
+    });
+  });
+
+  it("turns them off", () => {
+    expect(
+      parseCliArgs(["build", "v.json", "--out", "o.mp4", "--no-captions"])
+    ).toMatchObject({ captions: false });
   });
 });

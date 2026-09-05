@@ -11,7 +11,7 @@ import { parseVideoScript } from "../schema/videoScript.js";
 const USAGE = `cuecast — narration-timed reveal animations
 
 Usage:
-  cuecast build <video.json> --out <out.mp4> [--work-dir <dir>]
+  cuecast build <video.json> --out <out.mp4> [--work-dir <dir>] [--no-captions]
   cuecast --help
   cuecast --version
 
@@ -19,6 +19,7 @@ Options:
   --out <file>       Where to write the rendered video. Required.
   --work-dir <dir>   Where to put this run's intermediates.
                      Defaults to .cuecast/<video id> under the current directory.
+  --no-captions      Skip the .vtt and .srt written beside the video.
 
 Environment:
   CUECAST_TTS_URL          Base URL of a running Voicebox instance.
@@ -115,6 +116,7 @@ export async function main(argv: string[]): Promise<number> {
       scriptPath,
       outPath,
       workDir: resolveWorkDir(videoId, command.workDir),
+      captions: command.captions,
     });
   } catch (error) {
     process.stderr.write(`cuecast: ${(error as Error).message}\n`);

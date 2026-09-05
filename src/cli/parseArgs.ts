@@ -6,6 +6,8 @@ export interface BuildCommand {
   scriptPath: string;
   outPath: string;
   workDir: string | undefined;
+  /** Whether to write .vtt and .srt beside the video. */
+  captions: boolean;
 }
 
 export type CliCommand = BuildCommand | { command: "help" } | { command: "version" };
@@ -42,6 +44,7 @@ export function parseCliArgs(argv: string[]): CliCommand {
       options: {
         out: { type: "string" },
         "work-dir": { type: "string" },
+        "no-captions": { type: "boolean" },
       },
     });
   } catch (error) {
@@ -76,5 +79,6 @@ export function parseCliArgs(argv: string[]): CliCommand {
     scriptPath,
     outPath,
     workDir,
+    captions: parsed.values["no-captions"] !== true,
   };
 }

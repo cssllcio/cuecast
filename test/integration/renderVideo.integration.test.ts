@@ -20,6 +20,7 @@ describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
       scriptPath: resolve("test/fixtures/example-video.json"),
       outPath: resolve(outputPath),
       workDir: resolve(".cuecast/example_video"),
+      captions: true,
     });
 
     expect(existsSync(outputPath)).toBe(true);
@@ -56,6 +57,7 @@ describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
       scriptPath: resolve("test/fixtures/example-video.json"),
       outPath: resolve("out/repro-a.mp4"),
       workDir: resolve(".cuecast/repro_a"),
+      captions: true,
     });
     const first = readTiming(".cuecast/repro_a");
 
@@ -63,6 +65,7 @@ describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
       scriptPath: resolve("test/fixtures/example-video.json"),
       outPath: resolve("out/repro-b.mp4"),
       workDir: resolve(".cuecast/repro_b"),
+      captions: true,
     });
     const second = readTiming(".cuecast/repro_b");
 
@@ -98,5 +101,32 @@ describe.skipIf(!baseUrl)("renderVideo (live service, end to end)", () => {
     expect(existsSync(join(packageRoot(), "generated"))).toBe(false);
 
     rmSync(cwd, { recursive: true, force: true });
+  }, 600_000);
+
+  it("writes captions beside the video, from text rather than spoken", async () => {
+    const outPath = resolve("out/captions-proof.mp4");
+    await renderVideo({
+      scriptPath: resolve("test/fixtures/example-video.json"),
+      outPath,
+      workDir: resolve(".cuecast/captions_proof"),
+      captions: true,
+    });
+
+    const vtt = readFileSync(resolve("out/captions-proof.vtt"), "utf-8");
+    const srt = readFileSync(resolve("out/captions-proof.srt"), "utf-8");
+
+    expect(vtt.startsWith("WEBVTT")).toBe(true);
+    // example-video.json has two narration beats and one silence beat; the
+    // silence must not become a cue.
+    expect(vtt.match(/-->/g)).toHaveLength(2);
+    expect(srt.match(/-->/g)).toHaveLength(2);
+
+    // The respellings live in the fixture's `spoken` fields. If either reaches
+    // a caption, the text/spoken split has failed at the only point it matters.
+    for (const captions of [vtt, srt]) {
+      expect(captions).toContain("The API talks to the database.");
+      expect(captions).not.toContain("A P I");
+      expect(captions).not.toContain("S Q L");
+    }
   }, 600_000);
 }, 600_000);

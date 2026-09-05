@@ -72,6 +72,13 @@ Three things are deliberate and worth knowing before you read the code:
 
 ## Running it
 
+A build writes the video, plus `.vtt` and `.srt` captions beside it built from
+each narration beat's `text` — never its `spoken` respelling. Pass
+`--no-captions` to skip them. `--no-captions` only skips writing new caption
+files — it does not delete caption files left over from a previous build at
+the same `--out` path, so re-rendering with `--no-captions` after editing the
+script can leave a stale `.vtt`/`.srt` sitting next to the new video.
+
 ```bash
 npm install
 npm test            # unit suite, no services needed

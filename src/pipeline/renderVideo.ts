@@ -1,8 +1,10 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { remotionEntryPoint } from "../paths.js";
+import { buildCues } from "../captions/cues.js";
+import { formatSrt, formatVtt } from "../captions/format.js";
 import { renderMermaidToSvg } from "../mermaid/renderMermaidToSvg.js";
 import { NarrationClient } from "../narration/narrationClient.js";
 import { resolveBeatSeed } from "../narration/beatSeed.js";
@@ -28,10 +30,12 @@ export interface RenderVideoOptions {
   outPath: string;
   /** Absolute directory for this run's intermediates. */
   workDir: string;
+  /** Write .vtt and .srt beside the video. */
+  captions: boolean;
 }
 
 export async function renderVideo(options: RenderVideoOptions): Promise<void> {
-  const { scriptPath, outPath, workDir } = options;
+  const { scriptPath, outPath, workDir, captions } = options;
   const baseUrl = process.env.CUECAST_TTS_URL;
   const profileId = process.env.CUECAST_TTS_PROFILE_ID;
   if (!baseUrl || !profileId) {
@@ -160,4 +164,14 @@ export async function renderVideo(options: RenderVideoOptions): Promise<void> {
     outputLocation: outPath,
     inputProps,
   });
+
+  if (captions) {
+    // Beside the video, sharing its name: --out /tmp/demo.mp4 gives
+    // /tmp/demo.vtt and /tmp/demo.srt. Keyed off outPath rather than the video
+    // id, so a caller who renamed the output gets captions that match it.
+    const stem = join(dirname(outPath), basename(outPath, extname(outPath)));
+    const cues = buildCues(finalVideoScript);
+    writeFileSync(`${stem}.vtt`, formatVtt(cues));
+    writeFileSync(`${stem}.srt`, formatSrt(cues));
+  }
 }
