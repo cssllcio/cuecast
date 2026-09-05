@@ -200,3 +200,74 @@ describe("duck", () => {
     ).not.toThrow();
   });
 });
+
+describe("beat and video ids", () => {
+  const withScript = (script: unknown[]) => ({ ...validScript, script });
+
+  it("rejects two beats sharing an id", () => {
+    expect(() =>
+      parseVideoScript(
+        withScript([validScript.script[0], { ...validScript.script[0], text: "different" }])
+      )
+    ).toThrow(/beat_01/);
+  });
+
+  // The sharpest consequence, and the one that motivated this: the pipeline's
+  // durations/audioPaths/seeds maps are keyed by beat id with no regard for
+  // type, so a narration beat and a bed beat sharing an id put a narration
+  // seed onto the bed's timing entry — which the design says must never carry
+  // one — while both entries point at the same audio file.
+  it("rejects a duplicate across different beat types", () => {
+    expect(() =>
+      parseVideoScript(
+        withScript([validScript.script[0], { id: "beat_01", type: "bed", audio: "m.wav" }])
+      )
+    ).toThrow(/beat_01/);
+  });
+
+  it("reports every duplicate, not only the first", () => {
+    let message = "";
+    try {
+      parseVideoScript(
+        withScript([
+          validScript.script[0],
+          { ...validScript.script[0] },
+          { id: "gap", type: "silence", duration: 1 },
+          { id: "gap", type: "silence", duration: 2 },
+        ])
+      );
+    } catch (error) {
+      message = String(error);
+    }
+    expect(message).toMatch(/beat_01/);
+    expect(message).toMatch(/gap/);
+  });
+
+  // Different namespaces: audio lands at audio/<videoId>/<beatId>, so a beat
+  // named after its video collides with nothing.
+  it("allows a beat to share the video's id", () => {
+    expect(() =>
+      parseVideoScript(withScript([{ ...validScript.script[0], id: "example_video" }]))
+    ).not.toThrow();
+  });
+
+  for (const bad of ["has space", "with.dot", "with/slash", "", "café", ".."]) {
+    it(`rejects the beat id ${JSON.stringify(bad)}`, () => {
+      expect(() =>
+        parseVideoScript(withScript([{ ...validScript.script[0], id: bad }]))
+      ).toThrow();
+    });
+
+    it(`rejects the video id ${JSON.stringify(bad)}`, () => {
+      expect(() => parseVideoScript({ ...validScript, id: bad })).toThrow();
+    });
+  }
+
+  it("accepts letters, digits, underscores and hyphens", () => {
+    for (const good of ["beat_01", "beat-01", "BEAT01", "s1", "a"]) {
+      expect(() =>
+        parseVideoScript(withScript([{ ...validScript.script[0], id: good }]))
+      ).not.toThrow();
+    }
+  });
+});

@@ -7,13 +7,18 @@ import { extname } from "node:path";
 // Namespaced by video id so two videos that reuse a beat id (e.g. both
 // have a `beat_01`) never overwrite each other's audio in public/audio/.
 //
-// Both ids come from free-form JSON and end up as a path on disk, so a
-// separator or parent reference in either would let a crafted id write
-// outside public/audio/. Reject them here — and, since `videoId` is also
-// used to name the run's whole work dir (src/paths.ts's resolveWorkDir,
-// called from src/cli/cuecast.ts before this function is ever reached),
-// assertPathSafeId is exported so that call site can apply the same guard
-// instead of growing a second, divergent one.
+// Both ids end up as a path on disk, so a separator or parent reference in
+// either would let a crafted id write outside public/audio/. The schema now
+// rejects those far earlier (src/schema/videoScript.ts's idSchema, which is
+// strictly narrower than this check), so in the normal flow these two calls
+// never fire.
+//
+// They stay anyway, because this is the function that actually forms the
+// path: it is exported, it takes plain strings, and a future caller reaching
+// it with something the schema never saw should not be able to escape. The
+// schema decides what an author may write; this guarantees what a path may
+// be. Keeping both is why they are allowed to differ in strictness without
+// ever disagreeing.
 export function publicAudioPath(videoId: string, beatId: string, sourcePath: string): string {
   assertPathSafeId(videoId, "video id");
   assertPathSafeId(beatId, "beat id");

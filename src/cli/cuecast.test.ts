@@ -70,14 +70,28 @@ describe("cuecast CLI: video id safety", () => {
     const scriptPath = writeScript(dir, "..");
     const exitCode = await main(["build", scriptPath, "--out", join(dir, "out.mp4")]);
     expect(exitCode).toBe(1);
-    expect(stderr.join("")).toMatch(/video id ".." must be a non-empty name/);
+    // The rejection moved into the schema, so the message names the field
+    // path and the rule rather than restating the value.
+    expect(stderr.join("")).toMatch(/is not a valid video script/);
+    expect(stderr.join("")).toMatch(/\bid: must contain only letters, digits/);
+  });
+
+  it("does not print a raw ZodError dump", async () => {
+    const scriptPath = writeScript(dir, "docs/intro");
+    await main(["build", scriptPath, "--out", join(dir, "out.mp4")]);
+    const output = stderr.join("");
+    // A ZodError's `.message` is its issue array serialised as JSON. If that
+    // ever reaches a terminal again, these are the tells.
+    expect(output).not.toMatch(/"validation"/);
+    expect(output).not.toMatch(/"code":/);
   });
 
   it('rejects a "docs/intro" id (a plausible non-malicious id containing a separator)', async () => {
     const scriptPath = writeScript(dir, "docs/intro");
     const exitCode = await main(["build", scriptPath, "--out", join(dir, "out.mp4")]);
     expect(exitCode).toBe(1);
-    expect(stderr.join("")).toMatch(/video id "docs\/intro" must not contain a path separator/);
+    expect(stderr.join("")).toMatch(/is not a valid video script/);
+    expect(stderr.join("")).toMatch(/\bid: must contain only letters, digits/);
   });
 
   it("lets a normal id past the safety check (fails later, at the env check, not on the id)", async () => {
