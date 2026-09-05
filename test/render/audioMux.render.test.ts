@@ -1,15 +1,38 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { execa } from "execa";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cuecastWebpackOverride } from "../../src/remotion/webpackOverride.js";
 import { publicAudioPath } from "../../src/audio/publicAudioPath.js";
 import type { VideoScript } from "../../src/schema/videoScript.js";
 import { remotionEntryPoint } from "../../src/paths.js";
 
 describe("Cuecast composition audio muxing", () => {
+  // Remotion copies publicDir into the bundle, so staticFile() resolves
+  // against it. Given an absolute one it uses that; given none it defaults to
+  // <package root>/public and this test would litter the repo with fixture
+  // audio on every run. src/pipeline/renderVideo.ts hands it a per-run
+  // directory for the same reason; a temp dir is this test's equivalent.
+  let publicDir: string;
+
+  beforeEach(() => {
+    publicDir = mkdtempSync(join(tmpdir(), "cuecast-audio-mux-"));
+  });
+
+  afterEach(() => {
+    rmSync(publicDir, { recursive: true, force: true });
+  });
+
   it("mixes a bed beat's audio into the rendered video", async () => {
     // Proves the audio-muxing mechanism (schema audioPath -> composition
     // Audio/Sequence -> renderMedia) end to end without needing a live TTS
@@ -27,8 +50,9 @@ describe("Cuecast composition audio muxing", () => {
     // Build the public path with the real helper so this test exercises the
     // same video-id namespacing src/pipeline/renderVideo.ts uses (issue #4).
     const bedPublicPath = publicAudioPath("audio_mux_proof", "beat_bed", "test/fixtures/tone.wav");
-    mkdirSync(dirname(`public/${bedPublicPath}`), { recursive: true });
-    copyFileSync("test/fixtures/tone.wav", `public/${bedPublicPath}`);
+    const bedDestination = join(publicDir, bedPublicPath);
+    mkdirSync(dirname(bedDestination), { recursive: true });
+    copyFileSync("test/fixtures/tone.wav", bedDestination);
 
     const videoScript: VideoScript = {
       id: "audio_mux_proof",
@@ -50,6 +74,7 @@ describe("Cuecast composition audio muxing", () => {
     const bundleLocation = await bundle({
       entryPoint: remotionEntryPoint(),
       webpackOverride: cuecastWebpackOverride,
+      publicDir,
     });
     const composition = await selectComposition({
       serveUrl: bundleLocation,

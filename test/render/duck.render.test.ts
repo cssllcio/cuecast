@@ -1,8 +1,10 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { execa } from "execa";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseVideoScript } from "../../src/schema/videoScript.js";
 import { cuecastWebpackOverride } from "../../src/remotion/webpackOverride.js";
 import { remotionEntryPoint } from "../../src/paths.js";
@@ -24,6 +26,19 @@ async function maxVolumeDb(file: string, startSeconds: number, seconds: number) 
 }
 
 describe("bed ducking", () => {
+  // An absolute publicDir, for the same reason src/pipeline/renderVideo.ts
+  // uses one: without it Remotion defaults to <package root>/public and this
+  // test leaves its looped tone in the repo after every run.
+  let publicDir: string;
+
+  beforeEach(() => {
+    publicDir = mkdtempSync(join(tmpdir(), "cuecast-duck-"));
+  });
+
+  afterEach(() => {
+    rmSync(publicDir, { recursive: true, force: true });
+  });
+
   it("plays the bed quieter under the narration it ducks", async () => {
     const videoScript = parseVideoScript(
       JSON.parse(readFileSync("test/fixtures/duck-proof-video.json", "utf-8"))
@@ -39,14 +54,16 @@ describe("bed ducking", () => {
     // with no ducking at all (confirmed: it did, before this loop was
     // added). Looping the tone to cover the whole bed span means the
     // "ducked" window has real signal that only a working duck can quiet.
-    mkdirSync("public/audio/duck_proof", { recursive: true });
+    // The fixture's audioPath is "audio/duck_proof/music.wav", relative to
+    // publicDir — so the tone has to land at that path inside the temp dir.
+    mkdirSync(join(publicDir, "audio/duck_proof"), { recursive: true });
     await execa("ffmpeg", [
       "-y",
       "-stream_loop", "-1",
       "-i", "test/fixtures/tone.wav",
       "-t", "3.5",
       "-c", "copy",
-      "public/audio/duck_proof/music.wav",
+      join(publicDir, "audio/duck_proof/music.wav"),
     ]);
 
     const svgContent = readFileSync("test/fixtures/render-proof-video.svg", "utf-8");
@@ -55,6 +72,7 @@ describe("bed ducking", () => {
     const bundleLocation = await bundle({
       entryPoint: remotionEntryPoint(),
       webpackOverride: cuecastWebpackOverride,
+      publicDir,
     });
     // inputProps must be passed here as well as to renderMedia — omitting it
     // silently falls back to Root's defaultProps (the bug PR #3 fixed).
