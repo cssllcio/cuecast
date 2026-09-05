@@ -11,7 +11,7 @@ import { parseVideoScript } from "../schema/videoScript.js";
 const USAGE = `cuecast — narration-timed reveal animations
 
 Usage:
-  cuecast build <video.json> --out <out.mp4> [--work-dir <dir>]
+  cuecast build <video.json> --out <out.mp4> [--work-dir <dir>] [--no-captions]
   cuecast --help
   cuecast --version
 
